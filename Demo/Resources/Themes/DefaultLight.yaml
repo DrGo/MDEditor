@@ -1,0 +1,15 @@
+name: "Default Light"
+author: "MDEditor Team"
+description: "A clean, standard light theme."
+baseFontSize: 16.0
+# baseFontName: "San Francisco" # Example, or leave nil for system default
+textColorHex: "#24292F"        # Dark Gray
+linkColorHex: "#0969DA"        # Standard Blue
+codeForegroundColorHex: "#24292F" # Dark Gray for code, on light bg
+codeBlockBackgroundColorHex: "#F6F8FA" # Very Light Gray
+blockquoteColorHex: "#57606A"  # Medium Gray
+codeFontScale: 0.9
+headingScales: [2.0, 1.7, 1.5, 1.3, 1.15, 1.0] # Slightly adjusted scales
+blockquoteItalic: true
+listIndentPerLevel: 25.0
+blockquoteIndentPerLevel: 20.0

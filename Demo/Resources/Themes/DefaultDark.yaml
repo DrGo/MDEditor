@@ -1,0 +1,14 @@
+name: "Default Dark"
+author: "MDEditor Team"
+description: "A standard dark theme."
+baseFontSize: 16.0
+textColorHex: "#C9D1D9"        # Light Gray
+linkColorHex: "#58A6FF"        # Light Blue
+codeForegroundColorHex: "#C9D1D9" # Light Gray for code
+codeBlockBackgroundColorHex: "#161B22" # Very Dark Gray/Blue
+blockquoteColorHex: "#8B949E"  # Medium-Light Gray
+codeFontScale: 0.9
+headingScales: [2.0, 1.7, 1.5, 1.3, 1.15, 1.0]
+blockquoteItalic: true
+listIndentPerLevel: 25.0
+blockquoteIndentPerLevel: 20.0

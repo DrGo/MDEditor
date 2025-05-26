@@ -1,0 +1,64 @@
+{
+  "object" : {
+    "artifacts" : [
+
+    ],
+    "dependencies" : [
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-cmark",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/swiftlang/swift-cmark.git",
+          "name" : "cmark-gfm"
+        },
+        "state" : {
+          "checkoutState" : {
+            "branch" : "gfm",
+            "revision" : "b97d09472e847a416629f026eceae0e2afcfad65"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-cmark"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "swift-markdown",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/swiftlang/swift-markdown.git",
+          "name" : "swift-markdown"
+        },
+        "state" : {
+          "checkoutState" : {
+            "branch" : "main",
+            "revision" : "5d4f6b83fb9509b49f7735e7591abb3e4b6dbc2f"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "swift-markdown"
+      },
+      {
+        "basedOn" : null,
+        "packageRef" : {
+          "identity" : "yams",
+          "kind" : "remoteSourceControl",
+          "location" : "https://github.com/jpsim/Yams.git",
+          "name" : "Yams"
+        },
+        "state" : {
+          "checkoutState" : {
+            "revision" : "9281f8c99aff4f4a55dce22ae29b1181c935caa5",
+            "version" : "6.0.0"
+          },
+          "name" : "sourceControlCheckout"
+        },
+        "subpath" : "Yams"
+      }
+    ],
+    "prebuilts" : [
+
+    ]
+  },
+  "version" : 7
+}
