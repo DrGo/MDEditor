@@ -1,0 +1,173 @@
+name: "Default Enhanced Light"
+author: "MDEditor AI Assistant"
+description: "A comprehensive and clean light theme with good readability and structure."
+
+# Global Theme Settings
+layoutDirection: "ltr"        # Standard left-to-right
+globalFontName: nil           # Use system default font for broad compatibility (e.g., San Francisco on Apple, Segoe UI on Windows)
+globalBaseFontSize: 16.0      # A comfortable reading size for body text
+globalTextColor: "#24292e"    # Dark gray, almost black, for high contrast (GitHub-like)
+globalBackgroundColor: "#ffffff" # Pure white background
+globalAccentColor: "#0366d6"  # Standard blue for links and accents (GitHub-like)
+
+# Default Element Style (Fallback for any element not explicitly defined below)
+defaultElementStyle:
+  fontName: nil               # Inherit from globalFontName
+  fontSize: nil               # Inherit from globalBaseFontSize (16.0)
+  foregroundColor: nil        # Inherit from globalTextColor (#24292e)
+  isBold: false
+  isItalic: false
+  paragraphSpacingBefore: 8.0 # Default spacing before paragraphs
+  paragraphSpacingAfter: 16.0 # Default spacing after paragraphs (creates a bit more than a single line break)
+  lineHeightMultiplier: 1.6   # Generous line height for readability
+  alignment: "natural"        # Default text alignment
+
+# Specific Element Styles
+elementStyles:
+  paragraph:
+    # Inherits most from defaultElementStyle
+    # No specific overrides needed if default is sufficient
+    paragraphSpacingBefore: 0 # Paragraphs that are direct children of document might not need before-spacing
+    paragraphSpacingAfter: 16.0
+
+  heading1:
+    fontName: nil             # Can specify a different font for headings if desired
+    fontSize: 32.0            # Roughly 2em of globalBaseFontSize
+    isBold: true
+    foregroundColor: "#1b1f23" # Slightly darker than globalTextColor for more emphasis
+    paragraphSpacingBefore: 24.0 # More space above H1
+    paragraphSpacingAfter: 16.0  # Space after H1 before next content
+    # alignment: "left" # Explicitly left, or natural
+
+  heading2:
+    fontSize: 24.0            # Roughly 1.5em
+    isBold: true
+    foregroundColor: "#1b1f23"
+    paragraphSpacingBefore: 20.0
+    paragraphSpacingAfter: 12.0
+
+  heading3:
+    fontSize: 20.0            # Roughly 1.25em
+    isBold: true
+    foregroundColor: "#1b1f23"
+    paragraphSpacingBefore: 18.0
+    paragraphSpacingAfter: 10.0
+
+  heading4:
+    fontSize: 17.0            # Slightly larger than base
+    isBold: true
+    foregroundColor: "#24292e"
+    paragraphSpacingBefore: 16.0
+    paragraphSpacingAfter: 8.0
+
+  heading5:
+    fontSize: 16.0            # Same as base, but bold
+    isBold: true
+    foregroundColor: "#24292e"
+    paragraphSpacingBefore: 14.0
+    paragraphSpacingAfter: 6.0
+
+  heading6:
+    fontSize: 15.0            # Slightly smaller than base, bold, and muted
+    isBold: true
+    foregroundColor: "#586069" # Muted gray
+    paragraphSpacingBefore: 12.0
+    paragraphSpacingAfter: 4.0
+
+  link:
+    foregroundColor: "#0366d6"  # Use globalAccentColor
+    underline: false             # Common practice to not underline links by default, rely on color
+    # isBold: true # Optional: make links bold
+
+  strong: # Bold
+    isBold: true
+    # foregroundColor: "#1b1f23" # Optional: slightly darker bold text
+
+  emphasis: # Italic
+    isItalic: true
+
+  strikethrough:
+    strikethrough: true
+    foregroundColor: "#586069"  # Muted color for struck text
+
+  inlineCode:
+    fontName: "Menlo, Monaco, Consolas, 'Courier New', monospace" # Standard monospace stack
+    fontSize: 14.0             # Slightly smaller than base (0.875 * 16)
+    foregroundColor: "#d73a49"   # A common red/pink for inline code (GitHub-like)
+    backgroundColor: "#f6f8fa"   # Very light gray background
+    # kerning: 0.5 # Optional: slight kerning adjustment
+    # For properties like corner radius or internal padding, the renderer would need to support them.
+
+  codeBlock:
+    fontName: "Menlo, Monaco, Consolas, 'Courier New', monospace"
+    fontSize: 14.0
+    foregroundColor: "#24292e"   # Default text color within code block
+    backgroundColor: "#f6f8fa"   # Light gray background for the whole block
+    paragraphSpacingBefore: 16.0
+    paragraphSpacingAfter: 16.0
+    lineHeightMultiplier: 1.45
+    headIndent: 10.0              # Indent the whole code block slightly
+    firstLineHeadIndent: 10.0
+    # The renderer would need to handle syntax highlighting based on language.
+    # Theme could specify colors for tokens if renderer supports it.
+
+  blockquote:
+    # fontName: "Georgia, serif" # Optional: different font for quotes
+    isItalic: false # Common to not italicize the whole blockquote, but rather its content if needed
+    foregroundColor: "#586069"   # Muted gray text
+    # backgroundColor: "#f9f9f9" # Optional: very light background for quote
+    paragraphSpacingBefore: 16.0
+    paragraphSpacingAfter: 16.0
+    headIndent: 20.0              # Indent for the blockquote text
+    firstLineHeadIndent: 20.0
+    # The renderer needs to draw the border/bar. Theme could specify border color/width.
+    # e.g., borderColor: "#dfe2e5" (light gray border)
+
+  list: # Style for the list container itself (UL/OL)
+    paragraphSpacingBefore: 8.0  # Space before the entire list block
+    paragraphSpacingAfter: 16.0 # Space after the entire list block
+    headIndent: 25.0             # Base indentation for first level list markers
+
+  listItem: # Style for the content within a list item
+    paragraphSpacingBefore: 4.0  # Spacing between items if they are single paragraphs
+    paragraphSpacingAfter: 4.0
+    lineHeightMultiplier: 1.5    # Slightly tighter line height for list items
+    # The marker (bullet/number) styling is often handled by the renderer based on list type and depth.
+    # Theme could provide marker color if renderer supports it.
+
+  thematicBreak: # Horizontal Rule
+    # Renderer typically draws a line. Theme could specify color, height, margins.
+    # For NSAttributedString, this might be a character or an attachment.
+    # Using foregroundColor for the line color if renderer uses text attributes.
+    foregroundColor: "#d1d5da"   # Light gray line (GitHub-like)
+    paragraphSpacingBefore: 24.0
+    paragraphSpacingAfter: 24.0
+
+  table:
+    # Table styling is complex and highly renderer-dependent.
+    # These are conceptual.
+    # headerForegroundColor: "#1b1f23"
+    # headerBackgroundColor: "#f6f8fa"
+    # cellPadding: "8.0" # Conceptual
+    # borderColor: "#dfe2e5"
+    paragraphSpacingBefore: 16.0
+    paragraphSpacingAfter: 16.0
+
+  tableCell: # For content within table cells
+    # Similar to paragraph, but might have specific padding needs handled by renderer
+    paragraphSpacingBefore: 4.0
+    paragraphSpacingAfter: 4.0
+    lineHeightMultiplier: 1.5
+
+  image:
+    # Styling for image alt text or captions if rendered as text.
+    # Renderer handles actual image display.
+    foregroundColor: "#586069" # Muted color for alt text
+    alignment: "center"       # If renderer supports aligning the image block
+
+  # GFM Task List Item specific styles (conceptual, renderer needs support)
+  # taskListItemPending:
+  #   foregroundColor: nil # Inherit
+  # taskListItemCompleted:
+  #   foregroundColor: "#586069" # Muted
+  #   strikethrough: true

@@ -1,7 +1,7 @@
 name: "Default Dark"
 author: "MDEditor Team"
 description: "A standard dark theme."
-baseFontSize: 16.0
+baseFontSize: 12.0
 textColorHex: "#C9D1D9"        # Light Gray
 linkColorHex: "#58A6FF"        # Light Blue
 codeForegroundColorHex: "#C9D1D9" # Light Gray for code

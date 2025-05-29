@@ -1,0 +1,150 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:Tests">
+   </FileRef>
+   <FileRef
+      location = "group:Tests">
+   </FileRef>
+   <Group
+      location = "group:Demo"
+      name = "Demo">
+      <Group
+         location = "group:Resources"
+         name = "Resources">
+         <Group
+            location = "group:Themes"
+            name = "Themes">
+            <FileRef
+               location = "group:DebugExtreme.yaml">
+            </FileRef>
+            <FileRef
+               location = "group:DefaultDark.yaml">
+            </FileRef>
+            <FileRef
+               location = "group:DefaultLight.yaml">
+            </FileRef>
+         </Group>
+      </Group>
+      <FileRef
+         location = "group:MDEditorDemo.xcodeproj">
+      </FileRef>
+      <Group
+         location = "group:MDEditorDemo"
+         name = "MDEditorDemo">
+         <Group
+            location = "group:MDEditorDemo"
+            name = "MDEditorDemo">
+            <FileRef
+               location = "group:GFMShowcase.md">
+            </FileRef>
+            <FileRef
+               location = "group:MDEditorDemo.entitlements">
+            </FileRef>
+            <FileRef
+               location = "group:MDEditorDemoApp.swift">
+            </FileRef>
+            <FileRef
+               location = "group:Assets.xcassets">
+            </FileRef>
+            <FileRef
+               location = "group:MDEditorDemoApp.md">
+            </FileRef>
+            <FileRef
+               location = "group:ContentView.swift">
+            </FileRef>
+         </Group>
+      </Group>
+   </Group>
+   <Group
+      location = "group:Docs"
+      name = "Docs">
+      <FileRef
+         location = "group:ThemeManager.swift">
+      </FileRef>
+      <FileRef
+         location = "group:plan.md">
+      </FileRef>
+      <FileRef
+         location = "group:prompts.md">
+      </FileRef>
+   </Group>
+   <FileRef
+      location = "group:Package.resolved">
+   </FileRef>
+   <FileRef
+      location = "group:Package.swift">
+   </FileRef>
+   <Group
+      location = "group:Sources"
+      name = "Sources">
+      <Group
+         location = "group:MDEditor"
+         name = "MDEditor">
+         <FileRef
+            location = "group:ThemeParser.swift">
+         </FileRef>
+         <FileRef
+            location = "group:ThemeLoader.swift">
+         </FileRef>
+         <FileRef
+            location = "group:TextDirection.swift">
+         </FileRef>
+         <FileRef
+            location = "group:HexColor.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MarkdownElementStyle.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MDEditorPlatformActions.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MDEditorView.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MacOSPlatformActions.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MDEditorTheme.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MDEditorConfiguration.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MarkdownContentRenderer.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MarkdownStylingUtilities.swift">
+         </FileRef>
+         <FileRef
+            location = "group:IOSPlatformActions.swift">
+         </FileRef>
+      </Group>
+   </Group>
+   <Group
+      location = "group:Tests"
+      name = "Tests">
+      <Group
+         location = "group:MDEditorTests"
+         name = "MDEditorTests">
+         <FileSystemSynchronizedGroup
+            location = "group:Resources"
+            name = "Resources">
+         </FileSystemSynchronizedGroup>
+         <FileRef
+            location = "group:ThemeParserTests.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MDEditorListRenderingTests.swift">
+         </FileRef>
+         <FileRef
+            location = "group:CGMDEditorTests.swift">
+         </FileRef>
+         <FileRef
+            location = "group:MDEditorTests.swift">
+         </FileRef>
+      </Group>
+   </Group>
+</Workspace>

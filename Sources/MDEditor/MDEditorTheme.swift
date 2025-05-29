@@ -1,106 +1,147 @@
-// Defines the structure for a theme and its conversion to StyleConfiguration.
+// MDEditorTheme.swift
+// Defines the structure for a theme, including global settings and specific element styles.
 
-import SwiftUI
-import Yams // For Codable support with YAML
+import SwiftUI // For CGFloat, LayoutDirection
 
+// HexColor struct is defined in HexColor.swift
+// MarkdownElementStyle struct is defined in MarkdownElementStyle.swift and be Sendable.
+// TextDirection enum is defined in TextDirection.swift
 
-// MARK: - Theme Structure (Codable for YAML parsing)
-
-public struct MDEditorTheme: Codable, Identifiable, Equatable {
+/// Represents a complete theme for rendering Markdown.
+public struct MDEditorTheme: Codable, Identifiable, Equatable, Sendable {
     public var id: String { name } // Use theme name as a unique identifier
     public var name: String
     public var author: String?
     public var description: String?
 
-    // Base font settings
-    public var baseFontSize: CGFloat?
-    public var baseFontName: String?
+    // MARK: - Global Theme Settings
+    public var layoutDirection: TextDirection?
+    public var globalFontName: String?
+    public var globalBaseFontSize: CGFloat?
+    public var globalTextColor: HexColor?
+    public var globalBackgroundColor: HexColor?
+    public var globalAccentColor: HexColor?
 
-    // Text colors (as Hex strings in YAML, converted to MColor)
-    // We'll need a helper to convert hex strings to MColor.
-    public var textColorHex: String?
-    public var linkColorHex: String?
-    public var codeForegroundColorHex: String?
-    public var codeBlockBackgroundColorHex: String?
-    public var blockquoteColorHex: String?
+    // MARK: - Element Styles
+    public var defaultElementStyle: MarkdownElementStyle?
+    public var elementStyles: [String: MarkdownElementStyle]?
 
-    // Font scaling and style properties
-    public var codeFontScale: CGFloat?
-    public var headingScales: [CGFloat]? // H1 to H6 relative to baseFontSize
-    public var blockquoteItalic: Bool?
-
-    // Layout properties (optional in theme, can be overridden by MDEditorView)
-    public var listIndentPerLevel: CGFloat?
-    public var blockquoteIndentPerLevel: CGFloat?
-    // Note: layoutDirection is typically controlled by MDEditorView's UI,
-    // but a theme could provide a default if desired.
-
-    enum CodingKeys: String, CodingKey {
-        case name, author, description
-        case baseFontSize, baseFontName
-        case textColorHex = "textColor" // Map YAML key "textColor" to textColorHex
-        case linkColorHex = "linkColor"
-        case codeForegroundColorHex = "codeForegroundColor"
-        case codeBlockBackgroundColorHex = "codeBlockBackgroundColor"
-        case blockquoteColorHex = "blockquoteColor"
-        case codeFontScale, headingScales, blockquoteItalic
-        case listIndentPerLevel, blockquoteIndentPerLevel
-    }
-
-    // Default initializer
-    public init(name: String, author: String? = nil, description: String? = nil, baseFontSize: CGFloat? = nil, baseFontName: String? = nil, textColorHex: String? = nil, linkColorHex: String? = nil, codeForegroundColorHex: String? = nil, codeBlockBackgroundColorHex: String? = nil, blockquoteColorHex: String? = nil, codeFontScale: CGFloat? = nil, headingScales: [CGFloat]? = nil, blockquoteItalic: Bool? = nil, listIndentPerLevel: CGFloat? = nil, blockquoteIndentPerLevel: CGFloat? = nil) {
+    // MARK: - Initializer
+    public init(
+        name: String,
+        author: String? = nil,
+        description: String? = nil,
+        layoutDirection: TextDirection? = .leftToRight,
+        globalFontName: String? = nil,
+        globalBaseFontSize: CGFloat? = nil,
+        globalTextColor: HexColor? = nil,
+        globalBackgroundColor: HexColor? = nil,
+        globalAccentColor: HexColor? = nil,
+        defaultElementStyle: MarkdownElementStyle? = nil,
+        elementStyles: [String: MarkdownElementStyle]? = nil
+    ) {
         self.name = name
         self.author = author
         self.description = description
-        self.baseFontSize = baseFontSize
-        self.baseFontName = baseFontName
-        self.textColorHex = textColorHex
-        self.linkColorHex = linkColorHex
-        self.codeForegroundColorHex = codeForegroundColorHex
-        self.codeBlockBackgroundColorHex = codeBlockBackgroundColorHex
-        self.blockquoteColorHex = blockquoteColorHex
-        self.codeFontScale = codeFontScale
-        self.headingScales = headingScales
-        self.blockquoteItalic = blockquoteItalic
-        self.listIndentPerLevel = listIndentPerLevel
-        self.blockquoteIndentPerLevel = blockquoteIndentPerLevel
+        self.layoutDirection = layoutDirection
+        self.globalFontName = globalFontName
+        self.globalBaseFontSize = globalBaseFontSize
+        self.globalTextColor = globalTextColor
+        self.globalBackgroundColor = globalBackgroundColor
+        self.globalAccentColor = globalAccentColor
+        self.defaultElementStyle = defaultElementStyle
+        self.elementStyles = elementStyles
     }
-
-
-    // MARK: - Conversion to StyleConfiguration
     
-    /// Converts this theme into a `MarkdownContentRenderer.StyleConfiguration`.
-    /// - Parameter existingConfiguration: An optional existing configuration to use as a base for defaults.
-    /// - Returns: A `StyleConfiguration` instance based on the theme.
-    public func toStyleConfiguration(
-        baseDefaults: MarkdownContentRenderer.StyleConfiguration = .init()
-    ) -> MarkdownContentRenderer.StyleConfiguration {
-        
-        var newConfig = baseDefaults
 
-        // Apply theme values, falling back to baseDefaults if theme property is nil.
-        newConfig.baseFontSize = self.baseFontSize ?? baseDefaults.baseFontSize
-        newConfig.baseFontName = self.baseFontName // Can be nil to use system font
-        
-        newConfig.codeFontScale = self.codeFontScale ?? baseDefaults.codeFontScale
-        newConfig.headingScales = self.headingScales ?? baseDefaults.headingScales
-        newConfig.blockquoteItalic = self.blockquoteItalic ?? baseDefaults.blockquoteItalic
-        
-        newConfig.listIndentPerLevel = self.listIndentPerLevel ?? baseDefaults.listIndentPerLevel
-        newConfig.blockquoteIndentPerLevel = self.blockquoteIndentPerLevel ?? baseDefaults.blockquoteIndentPerLevel
+    // MARK: - Internal Default Theme
+    public static let internalDefault: MDEditorTheme = {
+     
+        let fallbackElementStyle = MarkdownElementStyle(
+            fontName: nil,       // Will inherit from globalFontName (which is also nil, so system font)
+            fontSize: nil,       // MODIFIED: Will inherit from globalBaseFontSize (16.0 below)
+            isBold: false,
+            isItalic: false,
+            foregroundColor: nil, // MODIFIED: Will inherit from globalTextColor (#333333 below)
+            paragraphSpacingBefore: 5,
+            paragraphSpacingAfter: 10,
+            lineHeightMultiplier: 1.2,
+            alignment: "natural"
+        )
 
-        // Color conversion (requires MColor.fromHex helper)
-        if let hex = textColorHex, let color = MColor.fromHex(hex) { newConfig.textColor = color }
-        if let hex = linkColorHex, let color = MColor.fromHex(hex) { newConfig.linkColor = color }
-        if let hex = codeForegroundColorHex, let color = MColor.fromHex(hex) { newConfig.codeForegroundColor = color }
-        if let hex = codeBlockBackgroundColorHex, let color = MColor.fromHex(hex) { newConfig.codeBlockBackgroundColor = color }
-        if let hex = blockquoteColorHex, let color = MColor.fromHex(hex) { newConfig.blockquoteColor = color }
-        
-        // layoutDirection is typically controlled by MDEditorView's UI,
-        // so it's not directly set from the theme here to avoid conflicts.
-        // If a theme were to provide a default, MDEditorView would need to decide how to use it.
+        var elementSpecificStyles: [String: MarkdownElementStyle] = [:]
+        // For element-specific styles, if fontSize is not set, it will fallback to
+        // defaultElementStyle.fontSize (now nil), then to globalBaseFontSize.
+        // The headingBaseSize calculation here is a bit redundant if defaultElementStyle.fontSize is nil,
+        // as it would effectively use the globalBaseFontSize for scaling.
+        // However, keeping it allows for a future scenario where defaultElementStyle.fontSize might be set.
+        let headingBaseSize: CGFloat = fallbackElementStyle.fontSize ?? 16.0 // Fallback to 16 if defaultElementStyle.fontSize is nil (which it is now)
 
-        return newConfig
-    }
+        elementSpecificStyles[MarkdownElementKey.paragraph.rawValue] = MarkdownElementStyle() // Empty, will fully use defaultElementStyle then globals
+
+        elementSpecificStyles[MarkdownElementKey.heading1.rawValue] = MarkdownElementStyle(fontSize: headingBaseSize * 2.0, isBold: true)
+        elementSpecificStyles[MarkdownElementKey.heading2.rawValue] = MarkdownElementStyle(fontSize: headingBaseSize * 1.8, isBold: true)
+        elementSpecificStyles[MarkdownElementKey.heading3.rawValue] = MarkdownElementStyle(fontSize: headingBaseSize * 1.6, isBold: true)
+        elementSpecificStyles[MarkdownElementKey.heading4.rawValue] = MarkdownElementStyle(fontSize: headingBaseSize * 1.4, isBold: true)
+        elementSpecificStyles[MarkdownElementKey.heading5.rawValue] = MarkdownElementStyle(fontSize: headingBaseSize * 1.2, isBold: true)
+        elementSpecificStyles[MarkdownElementKey.heading6.rawValue] = MarkdownElementStyle(fontSize: headingBaseSize * 1.1, isBold: true)
+
+        elementSpecificStyles[MarkdownElementKey.link.rawValue] = MarkdownElementStyle(foregroundColor: HexColor(red: 0x00, green: 0x7A, blue: 0xFF)) // #007AFF Blue
+        elementSpecificStyles[MarkdownElementKey.emphasis.rawValue] = MarkdownElementStyle(isItalic: true)
+        elementSpecificStyles[MarkdownElementKey.strong.rawValue] = MarkdownElementStyle(isBold: true)
+        elementSpecificStyles[MarkdownElementKey.strikethrough.rawValue] = MarkdownElementStyle(strikethrough: true)
+        
+        elementSpecificStyles[MarkdownElementKey.inlineCode.rawValue] = MarkdownElementStyle(
+            fontName: "Menlo", // Specific font for inline code
+            fontSize: (fallbackElementStyle.fontSize ?? 16.0) * 0.9, // Scale based on effective base
+            isItalic: false,
+            foregroundColor: HexColor(red: 0xD1, green: 0x2F, blue: 0x1B), // #D12F1B Reddish
+            backgroundColor: HexColor(red: 0xF6, green: 0xF8, blue: 0xFA)  // #F6F8FA Light Gray
+        )
+        elementSpecificStyles[MarkdownElementKey.codeBlock.rawValue] = MarkdownElementStyle(
+            fontName: "Menlo", // Specific font for code blocks
+            fontSize: (fallbackElementStyle.fontSize ?? 16.0) * 0.9, // Scale based on effective base
+            isItalic: false,
+            foregroundColor: HexColor(red: 0x33, green: 0x33, blue: 0x33), // #333333 Dark Gray text on light bg
+            backgroundColor: HexColor(red: 0xF6, green: 0xF8, blue: 0xFA),  // #F6F8FA Light Gray background
+            paragraphSpacingBefore: 8, paragraphSpacingAfter: 8
+        )
+        elementSpecificStyles[MarkdownElementKey.blockquote.rawValue] = MarkdownElementStyle(
+            isItalic: true, foregroundColor: HexColor(red: 0x58, green: 0x60, blue: 0x69), // #586069 Muted Gray
+            firstLineHeadIndent: 20, headIndent: 20
+        )
+        elementSpecificStyles[MarkdownElementKey.listItem.rawValue] = MarkdownElementStyle(paragraphSpacingBefore: 2, paragraphSpacingAfter: 2)
+
+
+        return MDEditorTheme(
+            name: "Internal Default",
+            author: "MDEditor Package",
+            description: "A basic, hardcoded theme for fallback.",
+            layoutDirection: .leftToRight,
+            globalFontName: nil, // System font will be used by default
+            globalBaseFontSize: 16.0, // Default base font size
+            globalTextColor: HexColor(red: 0x33, green: 0x33, blue: 0x33),     // #333333 Dark Gray
+            globalBackgroundColor: nil, // No global background color by default
+            globalAccentColor: HexColor(red: 0x00, green: 0x7A, blue: 0xFF),   // #007AFF Blue
+            defaultElementStyle: fallbackElementStyle, // This now has nil for fontSize and foregroundColor
+            elementStyles: elementSpecificStyles
+        )
+    }()
+}
+
+public enum MarkdownElementKey: String, CaseIterable, Codable {
+    case paragraph
+    case heading1, heading2, heading3, heading4, heading5, heading6
+    case list
+    case listItem
+    case blockquote
+    case codeBlock
+    case inlineCode
+    case link
+    case emphasis
+    case strong
+    case strikethrough
+    case image
+    case thematicBreak
 }
 

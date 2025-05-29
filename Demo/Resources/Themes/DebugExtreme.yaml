@@ -1,0 +1,137 @@
+name: "Debug Extreme"
+author: "Test Department"
+description: "A theme with extremely distinct styles for debugging purposes."
+
+# Global Settings (These will be used if not overridden by element styles or defaultElementStyle)
+layoutDirection: "ltr" # left-to-right
+globalFontName: "Papyrus" # A very distinct global font, if available
+globalBaseFontSize: 12.0 # A smaller base to make element-specific sizes more impactful
+globalTextColorHex: "#FF00FF" # Bright Magenta - for any text not specifically styled otherwise
+globalBackgroundColorHex: "#FFFF00" # Bright Yellow - for the overall view background (if your renderer applies it)
+globalAccentColorHex: "#00FFFF" # Bright Cyan - for links if link style doesn't specify color
+
+# Default Element Style (Fallback for any element not explicitly defined below)
+defaultElementStyle:
+  fontName: "Courier New"
+  fontSize: 10.0
+  foregroundColorHex: "#A0A0A0" # Medium Gray
+  isBold: false
+  isItalic: false
+  paragraphSpacingBefore: 2.0
+  paragraphSpacingAfter: 2.0
+
+# Specific Element Styles
+elementStyles:
+  paragraph:
+    fontName: "Times New Roman"
+    fontSize: 14.0
+    foregroundColorHex: "#00FF00" # Bright Green
+    lineHeightMultiplier: 1.8
+    paragraphSpacingBefore: 5.0
+    paragraphSpacingAfter: 10.0
+    alignment: "justified"
+
+  heading1:
+    fontName: "Impact"
+    fontSize: 48.0
+    isBold: true
+    isItalic: false
+    foregroundColorHex: "#FF0000" # Bright Red
+    paragraphSpacingBefore: 20.0
+    paragraphSpacingAfter: 10.0
+    alignment: "center"
+    underline: true
+
+  heading2:
+    fontName: "Comic Sans MS"
+    fontSize: 36.0
+    isBold: false
+    isItalic: true
+    foregroundColorHex: "#0000FF" # Bright Blue
+    paragraphSpacingBefore: 15.0
+    paragraphSpacingAfter: 8.0
+    strikethrough: true
+
+  heading3:
+    fontName: "Courier New"
+    fontSize: 28.0
+    isBold: true
+    isItalic: true
+    foregroundColorHex: "#FFFF00" # Bright Yellow (might be hard to see on yellow bg, good test!)
+    backgroundColorHex: "#333333" # Dark Gray background for H3
+    paragraphSpacingBefore: 10.0
+    paragraphSpacingAfter: 6.0
+
+  link:
+    fontName: "Georgia"
+    fontSize: 15.0 # Slightly larger than paragraph
+    isBold: true
+    isItalic: true
+    foregroundColorHex: "#FFA500" # Orange
+    underline: true
+
+  strong: # Bold
+    # fontName: "Arial Black" # Often too dominant, let it inherit font name
+    # fontSize: will inherit from parent by default unless specified
+    isBold: true # This is the key one
+    foregroundColorHex: "#FF69B4" # Hot Pink (for strong text itself)
+    # backgroundColorHex: "#ADD8E6" # Light blue background for bold
+
+  emphasis: # Italic
+    # fontName: inherit
+    # fontSize: inherit
+    isItalic: true # Key one
+    foregroundColorHex: "#32CD32" # Lime Green (for italic text itself)
+
+  strikethrough:
+    # fontName: inherit
+    # fontSize: inherit
+    strikethrough: true
+    foregroundColorHex: "#808080" # Gray for strikethrough text
+
+  inlineCode:
+    fontName: "Lucida Console"
+    fontSize: 13.0
+    isBold: false
+    isItalic: false
+    foregroundColorHex: "#FFFFFF" # White
+    backgroundColorHex: "#000080" # Navy Blue background
+    kerning: 1.5
+
+  codeBlock:
+    fontName: "Consolas"
+    fontSize: 14.0
+    foregroundColorHex: "#000000" # Black text
+    backgroundColorHex: "#E0E0E0" # Light gray background for the whole block
+    paragraphSpacingBefore: 10.0
+    paragraphSpacingAfter: 10.0
+    lineHeightMultiplier: 1.4
+    # Custom indents for code block (these are paragraph properties)
+    headIndent: 30.0
+    firstLineHeadIndent: 30.0
+
+  blockquote:
+    fontName: "Georgia"
+    isItalic: true
+    foregroundColorHex: "#4B0082" # Indigo
+    backgroundColorHex: "#F0E68C" # Khaki background
+    paragraphSpacingBefore: 8.0
+    paragraphSpacingAfter: 8.0
+    headIndent: 40.0 # Indent for the blockquote
+    firstLineHeadIndent: 40.0
+
+  listItem: # Style for the content within a list item
+    # fontName: inherit
+    # fontSize: inherit
+    paragraphSpacingBefore: 1.0
+    paragraphSpacingAfter: 1.0
+
+  list: # Style for the list container itself (UL/OL)
+    # This could control overall list margins via paragraph properties, if renderer supports it.
+    # For now, using headIndent for list item indentation from list styles.
+    headIndent: 30.0 # This will act as "indentPerLevel" if used by renderer
+
+  thematicBreak:
+    foregroundColorHex: "#FF0000" # Red line for HR
+    # The renderer needs to know how to draw this. This color could be used for a line.
+    # For MarkdownContentRenderer's current placeholder, it uses strikethrough color.

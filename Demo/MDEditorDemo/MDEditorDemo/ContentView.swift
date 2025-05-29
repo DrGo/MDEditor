@@ -2,38 +2,64 @@ import SwiftUI
 import MDEditor // Import your package library
 
 struct ContentView: View {
-    @State private var markdownText: String = """
-    # Welcome to MDEditor!
+    // State variable for the Markdown text, now initialized by loading from a resource
+    @State private var markdownText: String = ""
 
-    This demo now lets the host app choose a theme URL.
-    MDEditorView will load the theme from that URL.
-
-    ## Test Instructions:
-    1. Ensure your theme YAML files are in the `CustomThemes` directory
-       (e.g., in Application Support/YourAppName/CustomThemes/).
-    2. Use the 'Select Theme' menu below to pick a theme.
-    """
-
-    private var initialViewStyle: MarkdownContentRenderer.StyleConfiguration {
-        let style = MarkdownContentRenderer.StyleConfiguration(baseFontSize: 17.0)
-        return style
+    // The host app now provides an MDEditorTheme for initial styling.
+    private var initialThemeForView: MDEditorTheme {
+        var theme = MDEditorTheme.internalDefault
+        theme.name = "Demo App Initial Theme"
+        // theme.globalBaseFontSize = 14.0 // Example override
+        return theme
     }
 
+    // State variable for the Editor's configuration (Edit Mode).
     @State private var editorConfig: MDEditorConfiguration = {
         #if os(iOS)
         return MDEditorConfiguration(editorFontSize: 17)
-        #else
+        #else // macOS
         return MDEditorConfiguration(editorFontSize: 14)
         #endif
     }()
 
-    // Host app state for theme management
-    @State private var availableThemeFileURLs: [URL] = []
-    @State private var selectedThemeURL: URL? = nil // This will be passed to MDEditorView
-
+    // URL for the custom themes directory
     private var customThemesDirectoryURL: URL?
+    
+    @State private var selectedThemeURL: URL? = nil
+    @State private var availableThemeFiles: [URL] = []
+
+    // Function to load Markdown content from a bundled resource file
+    private func loadMarkdownFromResource(named fileName: String, withExtension ext: String) -> String {
+        guard let fileURL = Bundle.main.url(forResource: fileName, withExtension: ext) else {
+            print("ContentView: Markdown resource file '\(fileName).\(ext)' not found.")
+            return """
+            # Error Loading Content
+            
+            Could not find the Markdown file named '\(fileName).\(ext)' in the app bundle.
+            Please ensure it has been added to the MDEditorDemo target.
+            """
+        }
+        
+        do {
+            return try String(contentsOf: fileURL, encoding: .utf8)
+        } catch {
+            print("ContentView: Error reading Markdown resource file '\(fileName).\(ext)': \(error)")
+            return """
+            # Error Reading File
+            
+            Failed to read content from '\(fileName).\(ext)'.
+            Error: \(error.localizedDescription)
+            """
+        }
+    }
 
     init() {
+        // Initialize markdownText by loading from the resource
+        // This assignment needs to happen before other UI elements might try to access it.
+        // Since @State properties are initialized before 'self' is available,
+        // we load it here and assign it.
+        _markdownText = State(initialValue: loadMarkdownFromResource(named: "GFMShowcase", withExtension: "md"))
+
         let fileManager = FileManager.default
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "MDEditorDemoApp"
         var determinedURL: URL? = nil
@@ -54,10 +80,13 @@ struct ContentView: View {
             do {
                 try fileManager.createDirectory(at: url, withIntermediateDirectories: true, attributes: nil)
                 print("ContentView: Custom themes directory ensured at: \(url.path)")
-                // Load available theme URLs on init
-                self._availableThemeFileURLs = State(initialValue: loadThemeFileURLs(from: url))
-                // Optionally set a default theme URL if desired
-                // self._selectedThemeURL = State(initialValue: self.availableThemeFileURLs.first)
+                // Initialize State properties directly in init if they depend on instance members
+                let initialThemeFiles = loadThemeFileURLs(from: url)
+                _availableThemeFiles = State(initialValue: initialThemeFiles)
+                // Optionally set a default theme from the custom directory
+                // if initialThemeFiles.first != nil {
+                //     _selectedThemeURL = State(initialValue: initialThemeFiles.first)
+                // }
             } catch {
                 print("ContentView: Error creating custom themes directory at \(url.path): \(error)")
             }
@@ -74,7 +103,7 @@ struct ContentView: View {
                 includingPropertiesForKeys: nil,
                 options: .skipsHiddenFiles
             ).filter { $0.pathExtension == "yaml" || $0.pathExtension == "yml" }
-               .sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) // Sort by filename
+               .sorted(by: { $0.lastPathComponent < $1.lastPathComponent })
             print("ContentView: Found theme files: \(themeFileURLs.map { $0.lastPathComponent })")
             return themeFileURLs
         } catch {
@@ -83,16 +112,16 @@ struct ContentView: View {
         }
     }
     
-    // Helper to get a display name from a theme URL (filename without extension)
     private func themeName(from url: URL?) -> String {
-        guard let url = url else { return "Default Style" }
+        guard let url = url else { return "Default (Initial Theme)" }
         return url.deletingPathExtension().lastPathComponent
     }
+
 
     var body: some View {
         #if os(iOS)
         NavigationView {
-            mainContent
+            mainEditorView
                 .navigationTitle("MDEditor Demo")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -102,9 +131,9 @@ struct ContentView: View {
                 }
         }
         #else // macOS
-        mainContent
+        mainEditorView
             .frame(minWidth: 700, idealWidth: 800, maxWidth: .infinity, minHeight: 500, idealHeight: 700, maxHeight: .infinity)
-            .toolbar { // Add theme selection to macOS window toolbar
+            .toolbar {
                 ToolbarItemGroup {
                     themeSelectionMenu()
                 }
@@ -112,37 +141,33 @@ struct ContentView: View {
         #endif
     }
 
-    private var mainContent: some View {
+    private var mainEditorView: some View {
         MDEditorView(
             text: $markdownText,
             initialMode: .view,
-            initialStyleConfiguration: initialViewStyle, // Base style if no theme
+            initialTheme: initialThemeForView,
             editorConfiguration: $editorConfig,
-            themeURL: selectedThemeURL // Pass the selected theme URL
+            themeURL: selectedThemeURL
         )
     }
 
     @ViewBuilder
     private func themeSelectionMenu() -> some View {
         Menu {
-            // Use a Picker to select the theme URL
-            // The tag for the Picker needs to match the type of selectedThemeURL (URL?)
             Picker("Select Theme", selection: $selectedThemeURL.animation()) {
-                Text("Default Style").tag(URL?.none) // Option for no theme (nil URL)
-                ForEach(availableThemeFileURLs, id: \.self) { fileURL in
+                Text("Default (Initial Theme)").tag(URL?.none)
+                ForEach(availableThemeFiles, id: \.self) { fileURL in
                     Text(themeName(from: fileURL)).tag(URL?(fileURL))
                 }
             }
             .onChange(of: selectedThemeURL) { _, newURL in
-                print("ContentView: Selected theme URL changed to: \(newURL?.lastPathComponent ?? "None")")
+                print("ContentView: Host app selected theme URL: \(newURL?.lastPathComponent ?? "None (reverting to initial theme)")")
             }
             
-            // Button to refresh the list of themes (if files are added/removed while app is running)
             Button("Refresh Theme List") {
                 if let dirURL = customThemesDirectoryURL {
-                    self.availableThemeFileURLs = loadThemeFileURLs(from: dirURL)
-                    // If current selectedThemeURL is no longer valid, deselect it
-                    if let currentSelected = selectedThemeURL, !self.availableThemeFileURLs.contains(currentSelected) {
+                    self.availableThemeFiles = loadThemeFileURLs(from: dirURL)
+                    if let currentSelected = selectedThemeURL, !self.availableThemeFiles.contains(currentSelected) {
                         self.selectedThemeURL = nil
                     }
                 }
@@ -150,7 +175,9 @@ struct ContentView: View {
 
         } label: {
             Label(themeName(from: selectedThemeURL), systemImage: "paintbrush")
+                .labelStyle(.titleAndIcon)
         }
+        .help("Select a theme for the Markdown viewer.")
     }
 }
 
@@ -159,3 +186,5 @@ struct ContentView_Previews: PreviewProvider {
         ContentView()
     }
 }
+
+

@@ -1,11 +1,10 @@
 // MarkdownContentRenderer.swift
-// Handles parsing Markdown and rendering it to NSAttributedString with configurable styles.
+// Handles parsing Markdown and rendering it to NSAttributedString using MDEditorTheme.
 
-import Markdown // From swift-markdown package
-import SwiftUI
+import Markdown
+import SwiftUI // For LayoutDirection, and CGFloat
 
-// MARK: - Platform-Agnostic Type Aliases
-// These are primary definitions for the module.
+// MARK: - Platform-Agnostic Type Aliases (Primary Definitions)
 #if canImport(UIKit)
 import UIKit
 public typealias MFont = UIFont
@@ -20,112 +19,175 @@ public typealias MFontDescriptor = NSFontDescriptor
 #error("Unsupported platform: UIKit or AppKit must be available for MFont, MColor, MFontDescriptor.")
 #endif
 
-// Note: Helper extensions (MColor.fromHex, MFont.apply, NSAttributedString styling, etc.)
-// and utility protocols/structs (ListItemContainingMarkup)
-// have been moved to MarkdownStylingUtilities.swift
-
-// MARK: - Main Renderer Struct
 public struct MarkdownContentRenderer: MarkupVisitor {
+    private let theme: MDEditorTheme
+    
+    private let resolvedBaseFontSize: CGFloat
+    private let resolvedBaseFontName: String?
+    private let resolvedBaseTextColor: MColor
+    private let resolvedGlobalLayoutDirection: LayoutDirection
 
-    public struct StyleConfiguration: Equatable {
-        public var baseFontSize: CGFloat
-        public var baseFontName: String?
-        public var codeFontScale: CGFloat
-        public var headingScales: [CGFloat]
-        public var listIndentPerLevel: CGFloat
-        public var blockquoteIndentPerLevel: CGFloat
-        public var blockquoteItalic: Bool
-        public var layoutDirection: LayoutDirection
+    // Tracks the current list nesting depth to adjust indentation for list item contents.
+    // This is the depth of the list itself (0 for top-level, 1 for first nest, etc.)
+    private var currentListNestingDepth: Int = -1 // -1 means not currently inside a list environment
+    
+    // Added: Stores the paragraph style for the current list item's content
+    private var currentListItemParagraphStyle: NSMutableParagraphStyle?
 
-        // Platform-dependent default colors are defined here as they are part of the StyleConfiguration.
-        #if canImport(UIKit)
-        public var textColor: MColor = .label
-        public var linkColor: MColor = .systemBlue
-        public var codeForegroundColor: MColor = .secondaryLabel
-        public var codeBlockBackgroundColor: MColor = .secondarySystemGroupedBackground
-        public var blockquoteColor: MColor = .secondaryLabel
-        #elseif canImport(AppKit)
-        public var textColor: MColor = .labelColor
-        public var linkColor: MColor = .systemBlue
-        public var codeForegroundColor: MColor = .secondaryLabelColor
-        public var codeBlockBackgroundColor: MColor = .unemphasizedSelectedContentBackgroundColor
-        public var blockquoteColor: MColor = .secondaryLabelColor
-        #endif
+
+    public init(theme: MDEditorTheme = .internalDefault) {
+        self.theme = theme
         
-        public init(
-            baseFontSize: CGFloat = 16.0,
-            baseFontName: String? = nil,
-            codeFontScale: CGFloat = 0.9,
-            headingScales: [CGFloat] = [1.8, 1.6, 1.4, 1.2, 1.1, 1.0],
-            listIndentPerLevel: CGFloat = 25.0,
-            blockquoteIndentPerLevel: CGFloat = 20.0,
-            blockquoteItalic: Bool = true,
-            layoutDirection: LayoutDirection = .leftToRight
-        ) {
-            self.baseFontSize = baseFontSize
-            self.baseFontName = baseFontName
-            self.codeFontScale = codeFontScale
-            self.headingScales = headingScales
-            self.listIndentPerLevel = listIndentPerLevel
-            self.blockquoteIndentPerLevel = blockquoteIndentPerLevel
-            self.blockquoteItalic = blockquoteItalic
-            self.layoutDirection = layoutDirection
-        }
-    }
+        self.resolvedBaseFontSize = theme.globalBaseFontSize
+            ?? MDEditorTheme.internalDefault.globalBaseFontSize
+            ?? 16.0
 
-    private let configuration: StyleConfiguration
+        self.resolvedBaseFontName = theme.globalFontName
+            ?? MDEditorTheme.internalDefault.globalFontName
+            
+        self.resolvedBaseTextColor = theme.globalTextColor?.mColor
+            ?? MDEditorTheme.internalDefault.globalTextColor?.mColor
+            ?? MColor.platformDefaultTextColor
 
-    public init(configuration: StyleConfiguration = StyleConfiguration()) {
-        self.configuration = configuration
-    }
-    
-    public mutating func attributedString(from document: Document) -> NSAttributedString {
-        return visit(document)
-    }
-    
-    // Internal font helper methods remain here as they directly use `configuration`.
-    private func getBaseFont(ofSize size: CGFloat, weight: MFont.Weight = .regular) -> MFont {
-        let targetFont: MFont
-        if let fontName = configuration.baseFontName, !fontName.isEmpty,
-           let customFont = MFont(name: fontName, size: size) {
-            targetFont = customFont
+
+        if theme.layoutDirection == .rightToLeft {
+            self.resolvedGlobalLayoutDirection = .rightToLeft
         } else {
-            targetFont = MFont.systemFont(ofSize: size)
+            self.resolvedGlobalLayoutDirection = .leftToRight
         }
-
-        if weight != .regular {
-            return targetFont.apply(newTraits: weight == .bold ? getBoldTrait() : []) // getBoldTrait() is in MarkdownStylingUtilities
-        }
-        return targetFont
-    }
-    
-    private func getMonospacedFont(ofSize size: CGFloat, weight: MFont.Weight = .regular) -> MFont {
-        return MFont.platformMonospacedSystemFont(ofSize: size, weight: weight) // Static func on MFont from MarkdownStylingUtilities
-    }
-    
-    private func getMonospacedDigitFont(ofSize size: CGFloat, weight: MFont.Weight = .regular) -> MFont {
-        return MFont.platformMonospacedDigitSystemFont(ofSize: size, weight: weight) // Static func on MFont from MarkdownStylingUtilities
     }
 
-    private func baseParagraphStyle() -> NSMutableParagraphStyle {
+    public mutating func attributedString(from document: Document) -> NSAttributedString {
+        let finalResult = visit(document)
+        return finalResult
+    }
+
+    // MARK: - Style Resolution Logic
+    private func resolveStyle(for elementKey: MarkdownElementKey) -> MarkdownElementStyle {
+        var currentResolvedStyle = MDEditorTheme.internalDefault.defaultElementStyle ?? MarkdownElementStyle()
+
+        if let internalSpecific = MDEditorTheme.internalDefault.elementStyles?[elementKey.rawValue] {
+            currentResolvedStyle = internalSpecific.merging(over: currentResolvedStyle)
+        }
+        
+        if let themeDefault = theme.defaultElementStyle {
+            currentResolvedStyle = themeDefault.merging(over: currentResolvedStyle)
+        }
+        
+        if let themeSpecific = theme.elementStyles?[elementKey.rawValue] {
+            currentResolvedStyle = themeSpecific.merging(over: currentResolvedStyle)
+        }
+        return currentResolvedStyle
+    }
+
+    // MARK: - Attribute Construction Helpers
+    private func attributes(
+        for elementKey: MarkdownElementKey,
+        isNestedInList: Bool = false,
+        // listIndentLevel: the number of indentation units to apply (e.g., 1 for first level item content)
+        listIndentLevel: Int = 0
+    ) -> [NSAttributedString.Key: Any] {
+        let style = resolveStyle(for: elementKey)
+        var attributes: [NSAttributedString.Key: Any] = [:]
+
+        let fontSize = style.fontSize ?? self.resolvedBaseFontSize
+        let fontName = style.fontName ?? self.resolvedBaseFontName
+        
+        var font = MFont.create(name: fontName, size: fontSize)
+        
+        var traits: MFontDescriptor.SymbolicTraits = []
+        if style.isBold == true { traits.insert(getBoldTrait()) }
+        if style.isItalic == true { traits.insert(getItalicTrait()) }
+        if !traits.isEmpty {
+            font = font.apply(newTraits: traits)
+        }
+        attributes[.font] = font
+
+        let foregroundColor = style.foregroundColor?.mColor ?? self.resolvedBaseTextColor
+        attributes[.foregroundColor] = foregroundColor
+        
+        if let bgColor = style.backgroundColor?.mColor {
+            attributes[.backgroundColor] = bgColor
+        }
+
+        if style.strikethrough == true { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+        if style.underline == true { attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+        
+        if let kerning = style.kerning { attributes[.kern] = kerning }
+
+        let paraStyle = createParagraphStyle(for: style, elementKey: elementKey, isNestedInList: isNestedInList, listIndentLevel: listIndentLevel)
+        attributes[.paragraphStyle] = paraStyle
+        
+        return attributes
+    }
+    
+    private func createParagraphStyle(for style: MarkdownElementStyle, elementKey: MarkdownElementKey, isNestedInList: Bool, listIndentLevel: Int) -> NSMutableParagraphStyle {
         let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.baseWritingDirection = (configuration.layoutDirection == .rightToLeft) ? .rightToLeft : .leftToRight
+        paragraphStyle.baseWritingDirection = (self.resolvedGlobalLayoutDirection == .rightToLeft) ? .rightToLeft : .leftToRight
         
         #if canImport(AppKit)
-        if configuration.layoutDirection == .rightToLeft {
-             paragraphStyle.alignment = .right
-        } else {
-             paragraphStyle.alignment = .natural
-        }
+        if self.resolvedGlobalLayoutDirection == .rightToLeft { paragraphStyle.alignment = .right }
+        else { paragraphStyle.alignment = .natural }
         #endif
-        paragraphStyle.paragraphSpacingBefore = configuration.baseFontSize * 0.25
-        paragraphStyle.paragraphSpacing = configuration.baseFontSize * 0.5
+
+        switch style.alignment?.lowercased() {
+            case "left": paragraphStyle.alignment = .left
+            case "center": paragraphStyle.alignment = .center
+            case "right": paragraphStyle.alignment = .right
+            case "justified": paragraphStyle.alignment = .justified
+            case "natural": paragraphStyle.alignment = .natural
+            default: break
+        }
+
+        paragraphStyle.paragraphSpacingBefore = style.paragraphSpacingBefore ?? (isNestedInList && elementKey == .listItem ? 2 : 5)
+        paragraphStyle.paragraphSpacing = style.paragraphSpacingAfter ?? (isNestedInList && elementKey == .listItem ? 2 : 10)
+        
+        if let lineHeightMult = style.lineHeightMultiplier { paragraphStyle.lineHeightMultiple = lineHeightMult }
+        
+        var finalFirstLineHeadIndent = style.firstLineHeadIndent ?? 0
+        var finalHeadIndent = style.headIndent ?? 0
+        
+        if listIndentLevel > 0 {
+            let listThemeStyle = resolveStyle(for: .list)
+            let indentSizePerLevel: CGFloat = listThemeStyle.headIndent ?? 25.0
+            
+            let totalCalculatedIndent = CGFloat(listIndentLevel) * indentSizePerLevel
+            finalHeadIndent += totalCalculatedIndent
+            // For list items, the first line (marker) and subsequent lines share the same head indent.
+            // The marker itself is placed within this indent using tab stops.
+            finalFirstLineHeadIndent += totalCalculatedIndent
+        }
+
+        paragraphStyle.firstLineHeadIndent = finalFirstLineHeadIndent
+        paragraphStyle.headIndent = finalHeadIndent
+        paragraphStyle.tailIndent = style.tailIndent ?? 0
+        
         return paragraphStyle
     }
 
     // MARK: - Visitor Methods
-    // These methods form the core rendering logic.
+    mutating public func visitDocument(_ document: Document) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let childrenArray = Array(document.children)
+        let childrenCount = childrenArray.count
 
+        for (index, child) in childrenArray.enumerated() {
+            let childAttributedString = visit(child)
+            result.append(childAttributedString)
+
+            if index < childrenCount - 1 {
+                if !(child is UnorderedList || child is OrderedList || child is BlockQuote || child is CodeBlock || child is ThematicBreak) || childAttributedString.string.last != "\n" {
+                     result.append(NSAttributedString.singleNewline(
+                        withFontSize: resolvedBaseFontSize,
+                        fontName: resolvedBaseFontName,
+                        color: resolvedBaseTextColor
+                    ))
+                }
+            }
+        }
+        return result
+    }
+    
     mutating public func defaultVisit(_ markup: Markup) -> NSAttributedString {
         let result = NSMutableAttributedString()
         for child in markup.children {
@@ -135,284 +197,292 @@ public struct MarkdownContentRenderer: MarkupVisitor {
     }
     
     mutating public func visitText(_ text: Markdown.Text) -> NSAttributedString {
-        return NSAttributedString(string: text.plainText, attributes: [
-            .font: getBaseFont(ofSize: configuration.baseFontSize),
-            .foregroundColor: configuration.textColor
-        ])
+        return NSAttributedString(string: text.plainText)
     }
     
-    mutating public func visitEmphasis(_ emphasis: Emphasis) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        for child in emphasis.children {
-            result.append(visit(child))
+    mutating private func visitBlockElementAndSetFullStyle(markup: Markup, key: MarkdownElementKey, isNestedInList: Bool = false, listIndentLevel: Int = 0) -> NSAttributedString {
+        let finalAttributedString = NSMutableAttributedString()
+        let childrenArray = Array(markup.children)
+        for (index, child) in childrenArray.enumerated() {
+            finalAttributedString.append(visit(child))
+            // Add double newline between paragraphs within a list item or blockquote
+            if (key == .listItem || key == .blockquote) && child is Paragraph && index < childrenArray.count - 1 && childrenArray[index+1] is Paragraph {
+                 finalAttributedString.append(NSAttributedString.doubleNewline(withFontSize: resolvedBaseFontSize, fontName: resolvedBaseFontName, color: resolvedBaseTextColor))
+            }
         }
-        // Uses applyEmphasis from MarkdownStylingUtilities.swift
-        result.applyEmphasis(baseFontSize: configuration.baseFontSize, baseFontName: configuration.baseFontName, defaultFontColor: configuration.textColor)
+
+        if finalAttributedString.length > 0 {
+            // If currentListItemParagraphStyle is set, it means we are inside a list item's direct content (e.g. a Paragraph)
+            // and should use that pre-calculated style for consistent indentation.
+            let blockStylingAttributes: [NSAttributedString.Key: Any]
+            if let listItemParaStyle = currentListItemParagraphStyle, key == .paragraph && isNestedInList {
+                // For a paragraph directly inside a list item, use the list item's pre-calculated style
+                // but merge with paragraph-specific font/color if different.
+                var tempAttrs = attributes(for: key, isNestedInList: isNestedInList, listIndentLevel: listIndentLevel)
+                tempAttrs[.paragraphStyle] = listItemParaStyle // Override with the item's indent style
+                blockStylingAttributes = tempAttrs
+            } else {
+                 blockStylingAttributes = attributes(for: key, isNestedInList: isNestedInList, listIndentLevel: listIndentLevel)
+            }
+
+
+            // Apply the paragraph style for the block to the entire range.
+            // This is generally correct for simple blocks like Paragraph or Heading.
+            // For complex blocks (like ListItem), this method shouldn't be called directly on the ListItem itself.
+            if let paragraphStyle = blockStylingAttributes[.paragraphStyle] {
+                finalAttributedString.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: finalAttributedString.length))
+            }
+
+            let blockBaseFont = blockStylingAttributes[.font] ?? MFont.create(name: resolvedBaseFontName, size: resolvedBaseFontSize)
+            let blockBaseColor = blockStylingAttributes[.foregroundColor] ?? resolvedBaseTextColor
+
+            finalAttributedString.enumerateAttributes(in: NSRange(location: 0, length: finalAttributedString.length), options: []) { existingAttributes, range, _ in
+                var attributesToAdd: [NSAttributedString.Key: Any] = [:]
+                if existingAttributes[.font] == nil {
+                    attributesToAdd[.font] = blockBaseFont
+                }
+                if existingAttributes[.foregroundColor] == nil {
+                    attributesToAdd[.foregroundColor] = blockBaseColor
+                }
+                if !attributesToAdd.isEmpty {
+                    finalAttributedString.addAttributes(attributesToAdd, range: range)
+                }
+            }
+        }
+        return finalAttributedString
+    }
+    
+    mutating private func visitInlineElementAndAddSpecificStyles(markup: Markup, key: MarkdownElementKey) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let specificElementStyle = resolveStyle(for: key)
+
+        for child in markup.children {
+            let childAttributedString = visit(child)
+            let mutableChild = NSMutableAttributedString(attributedString: childAttributedString)
+
+            if mutableChild.length > 0 {
+                var attributesToLayer: [NSAttributedString.Key: Any] = [:]
+                
+                var currentFont = MFont.create(name: resolvedBaseFontName, size: resolvedBaseFontSize)
+
+                if let elFontName = specificElementStyle.fontName {
+                    currentFont = MFont.create(name: elFontName, size: specificElementStyle.fontSize ?? currentFont.pointSize)
+                } else if let elFontSize = specificElementStyle.fontSize {
+                    currentFont = MFont.create(name: currentFont.fontName, size: elFontSize)
+                }
+                
+                var traits: MFontDescriptor.SymbolicTraits = []
+                if specificElementStyle.isBold == true { traits.insert(getBoldTrait()) }
+                if specificElementStyle.isItalic == true { traits.insert(getItalicTrait()) }
+                if !traits.isEmpty {
+                    currentFont = currentFont.apply(newTraits: traits)
+                }
+                attributesToLayer[.font] = currentFont
+                
+                attributesToLayer[.foregroundColor] = specificElementStyle.foregroundColor?.mColor ?? resolvedBaseTextColor
+                
+                if let bgColor = specificElementStyle.backgroundColor?.mColor {
+                    attributesToLayer[.backgroundColor] = bgColor
+                }
+                if specificElementStyle.strikethrough == true { attributesToLayer[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+                if specificElementStyle.underline == true { attributesToLayer[.underlineStyle] = NSUnderlineStyle.single.rawValue }
+                
+                mutableChild.addAttributes(attributesToLayer, range: NSRange(location: 0, length: mutableChild.length))
+            }
+            result.append(mutableChild)
+        }
         return result
+    }
+
+    mutating public func visitParagraph(_ paragraph: Paragraph) -> NSAttributedString {
+        let indentLevel = paragraph.effectiveIndentLevelInList
+        return visitBlockElementAndSetFullStyle(markup: paragraph, key: .paragraph, isNestedInList: indentLevel > 0, listIndentLevel: indentLevel)
+    }
+
+    mutating public func visitHeading(_ heading: Heading) -> NSAttributedString {
+        let key: MarkdownElementKey
+        switch heading.level {
+            case 1: key = .heading1; case 2: key = .heading2; case 3: key = .heading3
+            case 4: key = .heading4; case 5: key = .heading5; default: key = .heading6
+        }
+        return visitBlockElementAndSetFullStyle(markup: heading, key: key)
+    }
+
+    mutating public func visitEmphasis(_ emphasis: Emphasis) -> NSAttributedString {
+        return visitInlineElementAndAddSpecificStyles(markup: emphasis, key: .emphasis)
     }
     
     mutating public func visitStrong(_ strong: Strong) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        for child in strong.children {
-            result.append(visit(child))
-        }
-        // Uses applyStrong from MarkdownStylingUtilities.swift
-        result.applyStrong(baseFontSize: configuration.baseFontSize, baseFontName: configuration.baseFontName, defaultFontColor: configuration.textColor)
-        return result
+        return visitInlineElementAndAddSpecificStyles(markup: strong, key: .strong)
     }
     
-    mutating public func visitParagraph(_ paragraph: Paragraph) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let paragraphStyle = baseParagraphStyle()
-
-        for child in paragraph.children {
-            result.append(visit(child))
-        }
-        result.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: result.length))
-        
-        if paragraph.hasSuccessor {
-            var newlinesRequired = true
-            if let parentListItem = paragraph.parent as? ListItem {
-                // isIdentical(to:) requires Markup to be AnyObject, which it is not.
-                // Compare based on range or a unique ID if available and necessary.
-                // For simplicity, checking if it's the last child by index.
-                if parentListItem.childCount > 0 && parentListItem.child(at: parentListItem.childCount - 1)?.range == paragraph.range {
-                     newlinesRequired = false
-                }
-            }
-            if newlinesRequired {
-                let newlines = paragraph.isContainedInList ? // isContainedInList from MarkdownStylingUtilities
-                    NSAttributedString.singleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor) :
-                    NSAttributedString.doubleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor)
-                result.append(newlines)
-            }
-        }
-        return result
+    mutating public func visitStrikethrough(_ strikethrough: Strikethrough) -> NSAttributedString {
+        return visitInlineElementAndAddSpecificStyles(markup: strikethrough, key: .strikethrough)
     }
-    
-    mutating public func visitHeading(_ heading: Heading) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let paragraphStyle = baseParagraphStyle()
-        paragraphStyle.paragraphSpacingBefore = 0
-        paragraphStyle.paragraphSpacing = configuration.baseFontSize * 0.25
-
-        for child in heading.children {
-            result.append(visit(child))
-        }
         
-        let level = min(max(1, heading.level), configuration.headingScales.count)
-        let scale = configuration.headingScales[level - 1]
-        // Uses applyHeading from MarkdownStylingUtilities.swift
-        result.applyHeading(level: heading.level,
-                              fontScale: scale,
-                              baseFontSize: configuration.baseFontSize,
-                              baseFontName: configuration.baseFontName,
-                              defaultFontColor: configuration.textColor)
-        
-        result.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: result.length))
-
-        if heading.hasSuccessor {
-            result.append(NSAttributedString.doubleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor))
-        }
-        return result
-    }
-    
     mutating public func visitLink(_ link: Markdown.Link) -> NSAttributedString {
         let result = NSMutableAttributedString()
+        let linkSpecificStyle = resolveStyle(for: .link)
+
         for child in link.children {
-            result.append(visit(child))
+            let childAttributedString = visit(child)
+            let mutableChild = NSMutableAttributedString(attributedString: childAttributedString)
+            
+            if mutableChild.length > 0 {
+                var linkAttrsToApply: [NSAttributedString.Key: Any] = [:]
+                
+                let linkColor = linkSpecificStyle.foregroundColor?.mColor
+                                ?? theme.globalAccentColor?.mColor
+                                ?? resolvedBaseTextColor
+                linkAttrsToApply[.foregroundColor] = linkColor
+                
+                var currentFont = MFont.create(name: resolvedBaseFontName, size: resolvedBaseFontSize)
+                if let linkFontName = linkSpecificStyle.fontName {
+                     currentFont = MFont.create(name: linkFontName, size: linkSpecificStyle.fontSize ?? currentFont.pointSize)
+                } else if let linkFontSize = linkSpecificStyle.fontSize {
+                     currentFont = MFont.create(name: currentFont.fontName, size: linkFontSize)
+                }
+
+                var traits: MFontDescriptor.SymbolicTraits = []
+                if linkSpecificStyle.isBold == true { traits.insert(getBoldTrait()) }
+                if linkSpecificStyle.isItalic == true { traits.insert(getItalicTrait()) }
+                if !traits.isEmpty {
+                    currentFont = currentFont.apply(newTraits: traits)
+                }
+                linkAttrsToApply[.font] = currentFont
+
+                if linkSpecificStyle.underline != false {
+                    linkAttrsToApply[.underlineStyle] = NSUnderlineStyle.single.rawValue
+                }
+                
+                mutableChild.addAttributes(linkAttrsToApply, range: NSRange(location: 0, length: mutableChild.length))
+            }
+            result.append(mutableChild)
         }
-        let url = link.destination.flatMap { URL(string: $0) }
-        // Uses applyLink from MarkdownStylingUtilities.swift
-        result.applyLink(withURL: url, color: configuration.linkColor)
+        
+        if result.length > 0, let urlDestination = link.destination, let url = URL(string: urlDestination) {
+            result.addAttribute(.link, value: url, range: NSRange(location: 0, length: result.length))
+        }
         return result
     }
     
     public func visitInlineCode(_ inlineCode: InlineCode) -> NSAttributedString {
-        return NSAttributedString(string: inlineCode.code, attributes: [
-            .font: getMonospacedFont(ofSize: configuration.baseFontSize * configuration.codeFontScale),
-            .foregroundColor: configuration.codeForegroundColor
-        ])
+        let tempSelf = self
+        let codeAttributes = tempSelf.attributes(for: .inlineCode)
+        return NSAttributedString(string: inlineCode.code, attributes: codeAttributes)
     }
     
     public func visitCodeBlock(_ codeBlock: CodeBlock) -> NSAttributedString {
+        let tempSelf = self
+        let codeBlockAttributes = tempSelf.attributes(for: .codeBlock)
         let codeText = codeBlock.code.hasSuffix("\n") ? String(codeBlock.code.dropLast()) : codeBlock.code
-        let paragraphStyle = baseParagraphStyle()
-        paragraphStyle.paragraphSpacingBefore = configuration.baseFontSize * 0.25
-        paragraphStyle.paragraphSpacing = configuration.baseFontSize * 0.25
+        return NSAttributedString(string: codeText, attributes: codeBlockAttributes)
+    }
+    
+    mutating public func visitBlockQuote(_ blockQuote: BlockQuote) -> NSAttributedString {
+        // A blockquote's own depth contributes to its indent, plus any list nesting it's within.
+        let listNestingForQuote = blockQuote.effectiveIndentLevelInList
+        let totalIndentLevel = listNestingForQuote + blockQuote.quoteDepth
+        return visitBlockElementAndSetFullStyle(markup: blockQuote, key: .blockquote, isNestedInList: listNestingForQuote > 0, listIndentLevel: totalIndentLevel)
+    }
 
-        let result = NSMutableAttributedString(string: codeText, attributes: [
-            .font: getMonospacedFont(ofSize: configuration.baseFontSize * configuration.codeFontScale),
-            .foregroundColor: configuration.codeForegroundColor,
-            .backgroundColor: configuration.codeBlockBackgroundColor,
-            .paragraphStyle: paragraphStyle
-        ])
-        
-        if codeBlock.hasSuccessor {
-            result.append(NSAttributedString.singleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor))
-        }
-        return result
-    }
-    
-    mutating public func visitStrikethrough(_ strikethrough: Strikethrough) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        for child in strikethrough.children {
-            result.append(visit(child))
-        }
-        // Uses applyStrikethrough from MarkdownStylingUtilities.swift
-        result.applyStrikethrough()
-        return result
-    }
-    
     mutating public func visitUnorderedList(_ unorderedList: UnorderedList) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let listFont = getBaseFont(ofSize: configuration.baseFontSize)
-                
-        for listItem in unorderedList.listItems {
-            let itemParagraphStyle = baseParagraphStyle()
-            itemParagraphStyle.paragraphSpacingBefore = 0
-            itemParagraphStyle.paragraphSpacing = 0
-            let listDepthValue: Int = unorderedList.listDepth // listDepth from MarkdownStylingUtilities
-            let baseListIndent: CGFloat = configuration.listIndentPerLevel
-            let additionalIndentPerLevel: CGFloat = configuration.listIndentPerLevel
-            let currentListDepthCGFloat = CGFloat(listDepthValue)
-            let effectiveIndentForPrefix = baseListIndent + (additionalIndentPerLevel * currentListDepthCGFloat)
-            let spacingFromBullet: CGFloat = 8.0
-            let bulletString = "•"
-            let bulletWidth = ceil(NSAttributedString(string: bulletString, attributes: [.font: listFont]).size().width)
-            let contentHeadIndent = effectiveIndentForPrefix + bulletWidth + spacingFromBullet
-            itemParagraphStyle.headIndent = contentHeadIndent
-            itemParagraphStyle.tabStops = [
-                NSTextTab(textAlignment: .left, location: effectiveIndentForPrefix),
-                NSTextTab(textAlignment: .left, location: contentHeadIndent)
-            ]
-            let prefixAttributes: [NSAttributedString.Key: Any] = [
-                .font: listFont,
-                .foregroundColor: configuration.textColor,
-                .paragraphStyle: itemParagraphStyle
-            ]
-            let prefix = NSAttributedString(string: "\t\(bulletString)\t", attributes: prefixAttributes)
-            let content = visit(listItem)
-            let fullItem = NSMutableAttributedString(attributedString: prefix)
-            fullItem.append(content)
-            fullItem.addAttribute(.paragraphStyle, value: itemParagraphStyle, range: NSRange(location: 0, length: fullItem.length))
-            result.append(fullItem)
-        }
-        
-        if unorderedList.hasSuccessor && !(unorderedList.parent is ListItem) {
-            result.append(NSAttributedString.doubleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor))
-        }
-        return result
-    }
-    
-    mutating public func visitListItem(_ listItem: ListItem) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        for (_, child) in listItem.children.enumerated() {
-            let childAttributedString = visit(child)
-            result.append(childAttributedString)
-        }
-        if listItem.hasSuccessor {
-             result.append(NSAttributedString.singleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor))
-        }
+        let previousListNestingDepth = currentListNestingDepth
+        currentListNestingDepth = unorderedList.listDepth
+        let result = visitList(listContent: unorderedList, markerFormat: "\t•\t", listNestingDepth: currentListNestingDepth, isOrdered: false)
+        currentListNestingDepth = previousListNestingDepth // Restore previous depth
         return result
     }
 
     mutating public func visitOrderedList(_ orderedList: OrderedList) -> NSAttributedString {
-        let result = NSMutableAttributedString()
-        let numeralFont: MFont = getMonospacedDigitFont(ofSize: configuration.baseFontSize)
-        
-        for (index, listItem) in orderedList.listItems.enumerated() {
-            let itemParagraphStyle = baseParagraphStyle()
-            itemParagraphStyle.paragraphSpacingBefore = 0
-            itemParagraphStyle.paragraphSpacing = 0
-            let listDepthValue: Int = orderedList.listDepth // listDepth from MarkdownStylingUtilities
-            let baseListIndent: CGFloat = configuration.listIndentPerLevel
-            let additionalIndentPerLevel: CGFloat = configuration.listIndentPerLevel
-            let currentListDepthCGFloat = CGFloat(listDepthValue)
-            let effectiveIndentForPrefix = baseListIndent + (additionalIndentPerLevel * currentListDepthCGFloat)
-            let itemCount = Array(orderedList.listItems).count
-            let numeralStringForWidth = "\(itemCount)."
-            let numeralColumnWidth = ceil(NSAttributedString(string: numeralStringForWidth, attributes: [.font: numeralFont]).size().width)
-            let spacingFromIndex: CGFloat = 8.0
-            let numeralEndPosition = effectiveIndentForPrefix + numeralColumnWidth
-            let contentHeadIndent = numeralEndPosition + spacingFromIndex
-            itemParagraphStyle.headIndent = contentHeadIndent
-            itemParagraphStyle.tabStops = [
-                NSTextTab(textAlignment: .right, location: numeralEndPosition),
-                NSTextTab(textAlignment: .left, location: contentHeadIndent)
-            ]
-            let prefixAttributes: [NSAttributedString.Key: Any] = [
-                .font: numeralFont,
-                .foregroundColor: configuration.textColor,
-                .paragraphStyle: itemParagraphStyle
-            ]
-            let prefix = NSAttributedString(string: "\t\(index + 1).\t", attributes: prefixAttributes)
-            let content = visit(listItem)
-            let fullItem = NSMutableAttributedString(attributedString: prefix)
-            fullItem.append(content)
-            fullItem.addAttribute(.paragraphStyle, value: itemParagraphStyle, range: NSRange(location: 0, length: fullItem.length))
-            result.append(fullItem)
-        }
-        
-        if orderedList.hasSuccessor && !(orderedList.parent is ListItem) {
-            result.append(NSAttributedString.doubleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor))
-        }
+        let previousListNestingDepth = currentListNestingDepth
+        currentListNestingDepth = orderedList.listDepth
+        let result = visitList(listContent: orderedList, markerFormat: "\t%d.\t", listNestingDepth: currentListNestingDepth, isOrdered: true)
+        currentListNestingDepth = previousListNestingDepth // Restore previous depth
         return result
     }
     
-    mutating public func visitBlockQuote(_ blockQuote: BlockQuote) -> NSAttributedString {
+    mutating private func visitList(listContent: Markup, markerFormat: String, listNestingDepth: Int, isOrdered: Bool) -> NSAttributedString {
         let result = NSMutableAttributedString()
-        
-        for child in blockQuote.children {
-            let childContent = visit(child)
-            let quoteAttributedString = NSMutableAttributedString(attributedString: childContent)
-            var effectiveRange = NSRange(location: 0, length: 0)
-            let existingParagraphStyle = quoteAttributedString.attribute(.paragraphStyle,
-                                                                      at: 0,
-                                                                      effectiveRange: &effectiveRange) as? NSParagraphStyle
-            let paragraphStyle = (existingParagraphStyle?.mutableCopy() as? NSMutableParagraphStyle) ?? baseParagraphStyle()
-            paragraphStyle.paragraphSpacingBefore = configuration.baseFontSize * 0.1
-            paragraphStyle.paragraphSpacing = configuration.baseFontSize * 0.1
-            let quoteDepthValue = blockQuote.quoteDepth // quoteDepth from MarkdownStylingUtilities
-            let indentAmount = configuration.blockquoteIndentPerLevel * CGFloat(quoteDepthValue + 1)
-            paragraphStyle.firstLineHeadIndent += indentAmount
-            paragraphStyle.headIndent += indentAmount
-            let attributesToApply: [NSAttributedString.Key: Any] = [
-                .paragraphStyle: paragraphStyle,
-                .foregroundColor: configuration.blockquoteColor
-            ]
-            quoteAttributedString.addAttributes(attributesToApply, range: NSRange(location: 0, length: quoteAttributedString.length))
-            if configuration.blockquoteItalic {
-                quoteAttributedString.enumerateAttribute(.font, in: NSRange(location: 0, length: quoteAttributedString.length), options: []) { value, range, _ in
-                    let currentFont = value as? MFont ?? getBaseFont(ofSize: configuration.baseFontSize)
-                    let italicFont = currentFont.apply(newTraits: getItalicTrait()) // getItalicTrait from MarkdownStylingUtilities
-                    quoteAttributedString.addAttribute(.font, value: italicFont, range: range)
-                }
-            }
-            result.append(quoteAttributedString)
-            if child.hasSuccessor {
-                 result.append(NSAttributedString.singleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.blockquoteColor))
-            }
-        }
-        if blockQuote.hasSuccessor {
-            result.append(NSAttributedString.doubleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor))
-        }
-        return result
-    }
-    
-    // MARK: - Placeholder Visitor Methods
+        let childrenAsArray = Array(listContent.children)
 
+        // Content of items in *this* list will be at listNestingDepth + 1
+        let itemContentEffectiveIndentLevel = listNestingDepth + 1
+
+        for (index, item) in childrenAsArray.enumerated() {
+            guard let listItem = item as? ListItem else { continue }
+            
+            let listItemStyle = resolveStyle(for: .listItem)
+            let markerParagraphStyle = createParagraphStyle(
+                for: listItemStyle,
+                elementKey: .listItem,
+                isNestedInList: true,
+                listIndentLevel: itemContentEffectiveIndentLevel // Marker and first line of item content share this indent
+            )
+            
+            let markerFont = MFont.create(name: listItemStyle.fontName ?? resolvedBaseFontName,
+                                          size: listItemStyle.fontSize ?? resolvedBaseFontSize)
+            let markerColor = listItemStyle.foregroundColor?.mColor ?? resolvedBaseTextColor
+            
+            let effectiveMarkerText = isOrdered ? String(format: markerFormat.trimmingCharacters(in: .whitespacesAndNewlines), index + 1)
+                                                : markerFormat.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            let markerAttributedString = NSAttributedString(string: effectiveMarkerText + "\t", attributes: [
+                .font: markerFont,
+                .foregroundColor: markerColor,
+                .paragraphStyle: markerParagraphStyle
+            ])
+            result.append(markerAttributedString)
+            
+            // Store this style so that direct Paragraph children of ListItem can use it.
+            let previousListItemStyleState = self.currentListItemParagraphStyle // Corrected: Accessing self.
+            self.currentListItemParagraphStyle = markerParagraphStyle      // Corrected: Accessing self.
+            
+            let itemContentResult = visit(listItem)
+            result.append(itemContentResult)
+            
+            self.currentListItemParagraphStyle = previousListItemStyleState // Restore // Corrected: Accessing self.
+
+            if index < childrenAsArray.count - 1 {
+                 result.append(NSAttributedString.singleNewline(withFontSize: resolvedBaseFontSize, fontName: resolvedBaseFontName, color: resolvedBaseTextColor))
+            }
+        }
+        return result
+    }
+
+    mutating public func visitListItem(_ listItem: ListItem) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let childrenArray = Array(listItem.children)
+        let childrenCount = childrenArray.count
+        
+        for (index, child) in childrenArray.enumerated() {
+            let childAttributedString = visit(child) // This will call visitParagraph, visitUnorderedList etc.
+            result.append(childAttributedString)
+            
+            if childrenCount > 1 && index < childrenCount - 1 {
+                 // If a list item has multiple blocks (e.g. two paragraphs), add a newline between them.
+                 // The paragraph spacing attributes should handle the visual separation.
+                 if childAttributedString.length > 0 && childAttributedString.string.last != "\n" {
+                    result.append(NSAttributedString.singleNewline(withFontSize: resolvedBaseFontSize, fontName: resolvedBaseFontName, color: resolvedBaseTextColor))
+                 }
+            }
+        }
+        return result
+    }
+    
     public func visitThematicBreak(_ thematicBreak: ThematicBreak) -> NSAttributedString {
-        let hrString = "\n" + String(repeating: "⎯", count: 20) + "\n\n"
-        let paragraphStyle = baseParagraphStyle()
-        paragraphStyle.alignment = .center
-        return NSAttributedString(string: hrString, attributes: [
-            .font: getBaseFont(ofSize: configuration.baseFontSize),
-            .foregroundColor: configuration.textColor.withAlphaComponent(0.3),
-            .paragraphStyle: paragraphStyle,
-            .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-            .strikethroughColor: configuration.textColor.withAlphaComponent(0.3)
-        ])
+        let tempSelf = self
+        let hrString = String(repeating: "⎯", count: 30)
+        let breakAttributes = tempSelf.attributes(for: .thematicBreak)
+        
+        let finalBreak = NSMutableAttributedString(string: "\n", attributes: [
+            .font: MFont.create(name: resolvedBaseFontName, size: resolvedBaseFontSize / 2),
+            .paragraphStyle: breakAttributes[.paragraphStyle] ?? NSParagraphStyle.default])
+        finalBreak.append(NSAttributedString(string: hrString, attributes: breakAttributes))
+        finalBreak.append(NSAttributedString(string: "\n\n", attributes: [
+            .font: MFont.create(name: resolvedBaseFontName, size: resolvedBaseFontSize / 2),
+            .paragraphStyle: breakAttributes[.paragraphStyle] ?? NSParagraphStyle.default]))
+        return finalBreak
     }
 
     public func visitHTMLBlock(_ htmlBlock: HTMLBlock) -> NSAttributedString {
@@ -426,55 +496,120 @@ public struct MarkdownContentRenderer: MarkupVisitor {
     }
     
     public func visitTable(_ table: Markdown.Table) -> NSAttributedString {
-        let headRowCount = table.head.childCount
-        let bodyRowCount = table.body.childCount
-        let columnCount = table.columnAlignments.count
-        let desc = "\n[Table: \(columnCount) columns, \(headRowCount) header row(s), \(bodyRowCount) body row(s)]\n\n"
-        return NSAttributedString(string: desc, attributes: [
-            .font: getBaseFont(ofSize: configuration.baseFontSize * 0.9, weight: .regular),
-            .foregroundColor: configuration.textColor.withAlphaComponent(0.7)
-        ])
+        let tempSelf = self
+        let attrs = tempSelf.attributes(for: .paragraph)
+        var tableRepresentation = "\n[Table Representation]\n"
+        
+        let head = table.head
+        let headCellsArray = Array(head.cells)
+        for cell in headCellsArray {
+            tableRepresentation += "| \(cell.plainText) "
+        }
+        tableRepresentation += "|\n"
+        tableRepresentation += String(repeating: "----", count: headCellsArray.count) + "\n"
+        
+        for rowMarkup in table.body.children {
+            if let row = rowMarkup as? Markdown.Table.Row {
+                for cell in row.cells {
+                    tableRepresentation += "| \(cell.plainText) "
+                }
+                tableRepresentation += "|\n"
+            }
+        }
+        tableRepresentation += "\n"
+        return NSAttributedString(string: tableRepresentation, attributes: attrs)
     }
+
     public func visitTableHead(_ tableHead: Markdown.Table.Head) -> NSAttributedString { return NSAttributedString() }
     public func visitTableBody(_ tableBody: Markdown.Table.Body) -> NSAttributedString { return NSAttributedString() }
     public func visitTableRow(_ tableRow: Markdown.Table.Row) -> NSAttributedString { return NSAttributedString() }
     public func visitTableCell(_ tableCell: Markdown.Table.Cell) -> NSAttributedString { return NSAttributedString() }
 
     public func visitImage(_ image: Markdown.Image) -> NSAttributedString {
+        let tempSelf = self
+        var imageAttributes = tempSelf.attributes(for: .image)
+        if imageAttributes[.foregroundColor] == nil {
+            let linkStyleColor = resolveStyle(for: .link).foregroundColor?.mColor
+            let globalAccent = theme.globalAccentColor?.mColor
+            imageAttributes[.foregroundColor] = linkStyleColor ?? globalAccent ?? resolvedBaseTextColor
+        }
+        
         var textElements: [String] = []
-        if let title = image.title, !title.isEmpty {
+        if !image.plainText.isEmpty {
+            textElements.append(image.plainText)
+        } else if let title = image.title, !title.isEmpty {
             textElements.append("\"\(title)\"")
-        } else if !image.plainText.isEmpty {
-             textElements.append(image.plainText)
         }
 
         let textPrefix = "Image: "
         var linkText = textElements.joined(separator: " ")
-        if linkText.isEmpty {
-            linkText = image.source ?? "untitled image"
-        }
-
-        let fullText = "\(textPrefix)\(linkText)"
+        if linkText.isEmpty { linkText = image.source ?? "untitled image" }
         
-        let result = NSMutableAttributedString(string: fullText, attributes: [
-            .font: getBaseFont(ofSize: configuration.baseFontSize * 0.9, weight: .regular),
-            .foregroundColor: configuration.linkColor
-        ])
+        let fullText = "\(textPrefix)[\(linkText)]"
         
+        let result = NSMutableAttributedString(string: fullText, attributes: imageAttributes)
         if let urlSource = image.source, let url = URL(string: urlSource) {
-            if let rangeOfLinkText = fullText.range(of: linkText) {
-                let nsRange = NSRange(rangeOfLinkText, in: fullText)
-                result.addAttribute(.link, value: url, range: nsRange)
-            } else if let rangeOfSource = fullText.range(of: urlSource) { // Fallback
-                let nsRange = NSRange(rangeOfSource, in: fullText)
-                result.addAttribute(.link, value: url, range: nsRange)
+            result.addAttribute(.link, value: url, range: NSRange(location: 0, length: result.length))
+            if imageAttributes[.underlineStyle] == nil && resolveStyle(for: .image).underline != false {
+                 result.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: result.length))
             }
         }
-        
-        if image.hasSuccessor && !(image.parent is Paragraph && (image.parent as? Paragraph)?.childCount == 1) {
-             result.append(NSAttributedString.singleNewline(withFontSize: configuration.baseFontSize, fontName: configuration.baseFontName, color: configuration.textColor))
-        }
         return result
+    }
+}
+
+// Internal helper extensions
+internal extension MFont {
+    static func create(name: String?, size: CGFloat) -> MFont {
+        if let fontName = name, !fontName.isEmpty, let customFont = MFont(name: fontName, size: size) {
+            return customFont
+        }
+        return MFont.systemFont(ofSize: size)
+    }
+}
+
+internal extension MColor {
+    static var platformDefaultTextColor: MColor {
+        #if canImport(UIKit)
+        return .label
+        #elseif canImport(AppKit)
+        return .labelColor
+        #else
+        return MColor(red: 0, green: 0, blue: 0, alpha: 1)
+        #endif
+    }
+
+    var rgbaDescription: String {
+        var r: CGFloat = -1, g: CGFloat = -1, b: CGFloat = -1, a: CGFloat = -1
+        #if canImport(UIKit)
+        self.getRed(&r, green: &g, blue: &b, alpha: &a)
+        #elseif canImport(AppKit)
+        if let calibratedColor = self.usingColorSpace(.sRGB) {
+            calibratedColor.getRed(&r, green: &g, blue: &b, alpha: &a)
+        } else {
+            self.getRed(&r, green: &g, blue: &b, alpha: &a)
+        }
+        #endif
+        return String(format: "R:%.2f G:%.2f B:%.2f A:%.2f", r, g, b, a)
+    }
+}
+
+// Add effectiveIndentLevelInList to MarkdownStylingUtilities.swift or here if not present
+extension Markup {
+    public var effectiveIndentLevelInList: Int {
+        var level = 0
+        var current: Markup? = self
+        while let parent = current?.parent {
+            if parent is ListItem {
+                level += 1
+            }
+            // Stop if we hit a List element itself, as its depth is handled by listDepth
+            if parent is UnorderedList || parent is OrderedList {
+                break
+            }
+            current = parent
+        }
+        return level
     }
 }
 
