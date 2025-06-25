@@ -2,11 +2,12 @@
 // Defines the style properties for a single Markdown element within a theme.
 
 import SwiftUI // For CGFloat
+import Foundation // For TimeInterval
 
 /// Represents the style for a specific Markdown element.
-/// All properties are optional, allowing for sparse definitions in themes, 
+/// All properties are optional, allowing for sparse definitions in themes,
 /// where unspecified properties can inherit from a default element style or global settings.
-public struct MarkdownElementStyle: Codable, Equatable, Sendable {
+public struct MarkdownElementStyle: Codable, Equatable, Sendable, Hashable {
     // Font properties
     public var fontName: String?
     public var fontSize: CGFloat? // Absolute font size
@@ -32,6 +33,9 @@ public struct MarkdownElementStyle: Codable, Equatable, Sendable {
     public var kerning: CGFloat?
     public var alignment: String? // "left", "center", "right", "justified", "natural"
 
+    // New property for animation/transition duration hint
+    public var animationHintDuration: TimeInterval?
+
     public init(
         fontName: String? = nil,
         fontSize: CGFloat? = nil,
@@ -48,7 +52,8 @@ public struct MarkdownElementStyle: Codable, Equatable, Sendable {
         headIndent: CGFloat? = nil,
         tailIndent: CGFloat? = nil,
         kerning: CGFloat? = nil,
-        alignment: String? = nil
+        alignment: String? = nil,
+        animationHintDuration: TimeInterval? = nil // Added to initializer
     ) {
         self.fontName = fontName
         self.fontSize = fontSize
@@ -66,6 +71,7 @@ public struct MarkdownElementStyle: Codable, Equatable, Sendable {
         self.tailIndent = tailIndent
         self.kerning = kerning
         self.alignment = alignment
+        self.animationHintDuration = animationHintDuration // Initialize new property
     }
 
     public func merging(over other: MarkdownElementStyle) -> MarkdownElementStyle {
@@ -85,8 +91,8 @@ public struct MarkdownElementStyle: Codable, Equatable, Sendable {
             headIndent: self.headIndent ?? other.headIndent,
             tailIndent: self.tailIndent ?? other.tailIndent,
             kerning: self.kerning ?? other.kerning,
-            alignment: self.alignment ?? other.alignment
+            alignment: self.alignment ?? other.alignment,
+            animationHintDuration: self.animationHintDuration ?? other.animationHintDuration // Merge new property
         )
     }
 }
-

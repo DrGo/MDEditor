@@ -8,7 +8,7 @@ struct ContentView: View {
     // The host app now provides an MDEditorTheme for initial styling.
     private var initialThemeForView: MDEditorTheme {
         var theme = MDEditorTheme.internalDefault
-        theme.name = "Demo App Initial Theme"
+        theme.frontMatter.title = "Demo App Initial Theme"
         // theme.globalBaseFontSize = 14.0 // Example override
         return theme
     }

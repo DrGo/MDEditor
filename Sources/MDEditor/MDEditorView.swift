@@ -3,12 +3,6 @@
 
 import SwiftUI
 import Markdown // From swift-markdown package
-// Yams is now used by ThemeLoader
-
-// TextDirection enum is expected to be defined in TextDirection.swift
-// MDEditorTheme is expected to be defined in MDEditorTheme.swift
-// MDEditorConfiguration is expected to be defined in MDEditorConfiguration.swift
-// ThemeLoader is expected to be defined in ThemeLoader.swift
 
 public enum MDEditorMode {
     case view
@@ -26,7 +20,7 @@ public struct MDEditorView: View {
     private static var renderingCache = NSCache<NSString, NSAttributedString>()
 
     private let themeURL: URL?
-    @State private var themeLoadingError: String? // Will store the localized description of ThemeLoadingError
+    @State private var themeLoadingError: String?
 
     private let initialTheme: MDEditorTheme
 
@@ -36,10 +30,11 @@ public struct MDEditorView: View {
     @State private var iosTextViewUndoManager: UndoManager?
     #endif
 
+    // Initializer
     public init(
         text: Binding<String>,
         initialMode: MDEditorMode = .view,
-        initialTheme: MDEditorTheme = .internalDefault,
+        initialTheme: MDEditorTheme = .internalDefault, // Assumes MDEditorTheme.internalDefault is available
         editorConfiguration: Binding<MDEditorConfiguration>,
         themeURL: URL? = nil
     ) {
@@ -51,6 +46,33 @@ public struct MDEditorView: View {
         self.themeURL = themeURL
     }
     
+    
+    // A convenience initializer for AttributedString
+      public init(
+          attributedString: Binding<AttributedString>,
+          initialMode: MDEditorMode = .view,
+          initialTheme: MDEditorTheme = .internalDefault,
+          editorConfiguration: Binding<MDEditorConfiguration>,
+          themeURL: URL? = nil
+      ) {
+          // Create the proxy binding internally
+          let stringBinding = Binding<String>(
+              get: { String(attributedString.wrappedValue.characters) },
+              set: { newStringValue in attributedString.wrappedValue = AttributedString(newStringValue) }
+          )
+          
+          // Call the primary initializer with the proxy
+          self.init(
+              text: stringBinding,
+              initialMode: initialMode,
+              initialTheme: initialTheme,
+              editorConfiguration: editorConfiguration,
+              themeURL: themeURL
+          )
+      }
+
+    
+    // Platform-specific actions
     private func getPlatformActions() -> MDEditorPlatformActions {
         #if os(macOS)
         return MacOSPlatformActions(undoManager: self.nsTextView?.undoManager)
@@ -59,6 +81,7 @@ public struct MDEditorView: View {
         #endif
     }
 
+    // Editor content view builder
     @ViewBuilder
     private func editorContentView() -> some View {
         #if os(macOS)
@@ -79,43 +102,52 @@ public struct MDEditorView: View {
         #endif
     }
     
+    // Theme loading and application logic
     private func loadAndApplyTheme(from url: URL?) {
-        self.themeLoadingError = nil
+        self.themeLoadingError = nil // Clear previous errors
         
         guard let themeFileURL = url else {
+            // No URL provided, revert to initial theme if not already active
             if self.activeTheme.id != self.initialTheme.id {
-                print("MDEditorView: No theme URL. Reverting to initialTheme: '\(self.initialTheme.name)'.")
+                print("MDEditorView: No theme URL. Reverting to initialTheme: '\(self.initialTheme.frontMatter.title ?? "Untitled Initial Theme")'.")
                 self.activeTheme = self.initialTheme
             }
+            // Re-parse only if necessary (e.g., text changed while on initial theme, or attributedText is nil)
             if attributedText == nil || self.activeTheme.id == self.initialTheme.id {
                  parseAndUpdateAttributedString(markdown: text)
             }
             return
         }
 
-        let result = ThemeLoader.loadTheme(from: themeFileURL)
+        // Attempt to load the theme from the URL
+        let result = ThemeLoader.loadTheme(from: themeFileURL) // Assumes ThemeLoader is available
         
         switch result {
         case .success(var loadedTheme):
+            // Preserve current view's layout direction if theme doesn't specify one, or if different
             let currentViewLayoutDirection = self.activeTheme.layoutDirection
-            if currentViewLayoutDirection != nil && currentViewLayoutDirection != loadedTheme.layoutDirection {
-                loadedTheme.layoutDirection = currentViewLayoutDirection
+            if loadedTheme.layoutDirection == nil || (currentViewLayoutDirection != nil && currentViewLayoutDirection != loadedTheme.layoutDirection) {
+                if currentViewLayoutDirection != nil { // Only override if current view had a specific one
+                    loadedTheme.layoutDirection = currentViewLayoutDirection
+                }
             }
             self.activeTheme = loadedTheme
-            print("MDEditorView: Successfully loaded and applied theme '\(loadedTheme.name)' from \(themeFileURL.lastPathComponent)")
+            print("MDEditorView: Successfully loaded and applied theme '\(loadedTheme.frontMatter.title ?? "Untitled Loaded Theme")' from \(themeFileURL.lastPathComponent)")
             self.themeLoadingError = nil
         case .failure(let error):
-            self.themeLoadingError = error.localizedDescription // Using the localizedDescription from ThemeLoadingError
+            self.themeLoadingError = error.localizedDescription
             print("MDEditorView: ERROR loading/decoding theme: \(self.themeLoadingError ?? "Unknown error string")")
+            // Revert to initial theme on error if not already active
             if self.activeTheme.id != self.initialTheme.id {
-                 print("MDEditorView: Theme loading/decoding error. Reverting to initialTheme: '\(self.initialTheme.name)'.")
+                 print("MDEditorView: Theme loading/decoding error. Reverting to initialTheme: '\(self.initialTheme.frontMatter.title ?? "Untitled Initial Theme")'.")
                 self.activeTheme = self.initialTheme
             }
         }
+        // Always re-parse after theme change attempt
         parseAndUpdateAttributedString(markdown: text)
     }
 
-    // MARK: - Computed Properties and Methods for LTR/RTL Toggle
+    // Computed properties for layout direction
     private var currentEffectiveLayoutDirection: TextDirection {
         if mode == .view {
             return activeTheme.layoutDirection ?? .leftToRight
@@ -128,30 +160,35 @@ public struct MDEditorView: View {
         return currentEffectiveLayoutDirection == .rightToLeft ? .rightToLeft : .leftToRight
     }
 
+    // Action to toggle layout direction
     private func toggleLayoutDirection() {
         if mode == .view {
             var newThemeToUpdateLayout = self.activeTheme
             newThemeToUpdateLayout.layoutDirection = (currentEffectiveLayoutDirection == .leftToRight) ? .rightToLeft : .leftToRight
-            self.activeTheme = newThemeToUpdateLayout
+            self.activeTheme = newThemeToUpdateLayout // This will trigger onChange for activeTheme
         } else {
+            // This directly modifies the binding, host view should react if needed
             editorConfiguration.editorLayoutDirection = (currentEffectiveLayoutDirection == .leftToRight) ? .rightToLeft : .leftToRight
         }
     }
 
-
+    // Main body of the view
     public var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Display theme loading errors
             if let error = themeLoadingError {
-                ScrollView { // Make error scrollable if it's long
+                ScrollView {
                     Text(error)
                         .foregroundColor(.red)
                         .padding()
                         .font(.caption)
-                        .frame(maxWidth: .infinity, alignment: .leading) // Ensure it takes width
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .frame(maxHeight: 100) // Limit height of error view
+                .frame(maxHeight: 100) // Limit error view height
                 Divider()
             }
+            
+            // Main content area
             Group {
                 if mode == .edit {
                     editorContentView()
@@ -162,7 +199,7 @@ public struct MDEditorView: View {
                         #else // iOS
                         .border(Color(UIColor.separator), width: 0.5)
                         #endif
-                } else {
+                } else { // View mode
                     ScrollView {
                         if let attributedText = attributedText {
                             Text(attributedText)
@@ -170,9 +207,11 @@ public struct MDEditorView: View {
                                 .padding(10)
                                 .textSelection(.enabled)
                         } else {
-                            Text(text)
+                            // Fallback for when attributedText is nil (e.g., during initial load or error)
+                            Text(text) 
                                 .frame(minWidth: 0, maxWidth: .infinity, alignment: .topLeading)
                                 .padding(10)
+                                .font(.system(.body, design: .monospaced)) // Basic monospaced display
                         }
                     }
                     .frame(minHeight: 200, maxHeight: .infinity)
@@ -180,18 +219,21 @@ public struct MDEditorView: View {
                 }
             }
         }
-        .onChange(of: text) { _, newText in
+        .onChange(of: text) { oldValue, newText in
              parseAndUpdateAttributedString(markdown: newText)
         }
-        .onChange(of: activeTheme) { _, newTheme in
-            print("MDEditorView: activeTheme CHANGED to '\(newTheme.name)'. Clearing ALL cache and forcing re-render.")
+        .onChange(of: activeTheme) { oldValue, newTheme in
+            print("MDEditorView: activeTheme CHANGED to '\(newTheme.frontMatter.title ?? "Untitled Theme")'. Clearing ALL cache and forcing re-render.")
             Self.renderingCache.removeAllObjects()
             parseAndUpdateAttributedString(markdown: text)
         }
-        .onChange(of: editorConfiguration) { _, newConfig in
+        .onChange(of: editorConfiguration) { oldValue, newConfig in
+            // This print statement is for debugging.
+            // If editorConfiguration changes affect the raw text view directly (e.g., font size in edit mode),
+            // the MacOSTextEditorView/IOSEditorTextView updateUIView methods should handle it.
             print("MDEditorView: editorConfiguration binding changed by host. LayoutDirection: \(newConfig.editorLayoutDirection)")
         }
-        .onChange(of: themeURL) { _, newURL in
+        .onChange(of: themeURL) { oldValue, newURL in
             print("MDEditorView: themeURL CHANGED to \(newURL?.absoluteString ?? "nil"). Loading and applying.")
             loadAndApplyTheme(from: newURL)
         }
@@ -199,19 +241,21 @@ public struct MDEditorView: View {
             if themeURL != nil {
                 loadAndApplyTheme(from: themeURL)
             } else {
+                // Ensure initial parsing if no theme URL and no attributedText yet
                 if attributedText == nil {
                      parseAndUpdateAttributedString(markdown: text)
                 }
             }
         }
         .toolbar {
-            toolbarContent
+            toolbarContent // Using the @ToolbarContentBuilder property
         }
     }
 
-    // MARK: - Consolidated Toolbar Content Builder
+    // Toolbar content builder
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        // Leading items (Undo/Redo in Edit mode)
         if mode == .edit {
             ToolbarItemGroup(placement: toolbarItemPlacementLeading) {
                 Button { getPlatformActions().undo() } label: { Image(systemName: "arrow.uturn.backward") }
@@ -223,11 +267,13 @@ public struct MDEditorView: View {
                     .disabled(!getPlatformActions().canRedo())
             }
         } else {
+            // Placeholder for leading items in View mode if needed, or keep EmptyView
             ToolbarItemGroup(placement: toolbarItemPlacementLeading) {
                 EmptyView()
             }
         }
 
+        // Principal items (Mode Picker)
         ToolbarItemGroup(placement: .principal) {
             Picker("Mode", selection: $mode) {
                 Text("View").tag(MDEditorMode.view)
@@ -236,6 +282,7 @@ public struct MDEditorView: View {
             .pickerStyle(.segmented)
         }
 
+        // Trailing items (Layout toggle, Clear, Copy All)
         ToolbarItemGroup(placement: toolbarItemPlacementTrailing) {
             Button {
                 toggleLayoutDirection()
@@ -252,11 +299,11 @@ public struct MDEditorView: View {
         }
     }
 
-
-    // MARK: - Helper Properties and Methods
+    // Helper computed properties for toolbar item placement
+    // These must be at the struct's top level, not inside a function.
     private var toolbarItemPlacementLeading: ToolbarItemPlacement {
         #if os(macOS)
-        return .navigation
+        return .navigation // Standard for macOS leading items
         #else // iOS
         return .navigationBarLeading
         #endif
@@ -264,14 +311,17 @@ public struct MDEditorView: View {
 
     private var toolbarItemPlacementTrailing: ToolbarItemPlacement {
         #if os(macOS)
-        return .primaryAction
+        return .primaryAction // Standard for macOS primary actions
         #else // iOS
         return .navigationBarTrailing
         #endif
     }
     
+    // Markdown parsing and AttributedString update logic
+    // This must be a method of the struct.
     private func parseAndUpdateAttributedString(markdown: String) {
-        let cacheKey = "\(markdown)-\(activeTheme.id)-\(activeTheme.layoutDirection?.rawValue ?? "ltr")" as NSString
+        // Use nil-coalescing for optional title in cacheKey for safety
+        let cacheKey = "\(markdown)-\(activeTheme.id)-\(activeTheme.frontMatter.title ?? "no_title")-\(activeTheme.layoutDirection?.rawValue ?? "ltr")" as NSString
         
         if let cachedData = Self.renderingCache.object(forKey: cacheKey) {
             do {
@@ -282,14 +332,15 @@ public struct MDEditorView: View {
                 #endif
             } catch {
                 print("MDEditorView: Error converting cached NSAttributedString to AttributedString: \(error)")
-                Self.renderingCache.removeObject(forKey: cacheKey)
-                self.attributedText = AttributedString("Error displaying cached content.")
+                Self.renderingCache.removeObject(forKey: cacheKey) // Remove bad cache entry
+                self.attributedText = AttributedString("Error displaying cached content.") // Fallback
             }
             return
         }
         
+        // Perform parsing and rendering
         let document = Document(parsing: markdown)
-        var renderer = MarkdownContentRenderer(theme: activeTheme)
+        var renderer = MarkdownContentRenderer(theme: activeTheme) // Assumes MarkdownContentRenderer is available
         let nsAttributedString = renderer.attributedString(from: document)
 
         do {
@@ -300,8 +351,9 @@ public struct MDEditorView: View {
             #endif
         } catch {
             print("MDEditorView: Error converting new NSAttributedString to AttributedString: \(error)")
-            self.attributedText = AttributedString("Error displaying content.")
+            self.attributedText = AttributedString("Error displaying content.") // Fallback
         }
+        // Cache the newly rendered NSAttributedString
         Self.renderingCache.setObject(nsAttributedString, forKey: cacheKey)
     }
 }
@@ -316,7 +368,8 @@ struct MDEditorView_Previews: PreviewProvider {
     - Item 2
     """
     @State static var previewEditorConfig: MDEditorConfiguration = .init()
-    static let previewInitialTheme: MDEditorTheme = .internalDefault
+    // Uses .internalDefault which should be correctly defined in MDEditorTheme
+    static let previewInitialTheme: MDEditorTheme = .internalDefault 
     
     static var previews: some View {
         #if os(macOS)
@@ -343,4 +396,3 @@ struct MDEditorView_Previews: PreviewProvider {
     }
 }
 #endif
-

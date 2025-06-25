@@ -53,11 +53,17 @@ help:
 	echo "  BUILD_CONFIG         Set the build configuration (default: debug). Example: make test BUILD_CONFIG=release"
 	echo "  TEST_PRODUCT_NAME    Set the test product name (default: $(PACKAGE_NAME)PackageTests). Adjust if your .xctest bundle name differs."
 
+buildonly: 
+	@$(SWIFT) build --quiet 2>&1 | grep -E ":\d+:\d+: (error|warning):" | sed 's|.*/||'
 
-# Target to run tests
+build:
+	@$(SWIFT) build --quiet 2>&1 | grep -E ":\d+:\d+: (error|warning):" | sed 's|.*/||' | tee /dev/tty | pbcopy
+
+testbuild:
+	@$(SWIFT) test --quiet 2>&1 | grep -E ":\d+:\d+: (error|warning):" | sed 's|.*/||' | tee /dev/tty | pbcopy
+
 test:
-	echo "🧪 Running tests for $(PACKAGE_NAME)..."
-	$(SWIFT) test --build-path .build --configuration $(BUILD_CONFIG)
+	$(SWIFT) test --skip-build --build-path .build --configuration $(BUILD_CONFIG)
 
 # Target to run tests with coverage enabled
 coverage:

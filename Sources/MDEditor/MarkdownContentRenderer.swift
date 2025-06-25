@@ -450,26 +450,30 @@ public struct MarkdownContentRenderer: MarkupVisitor {
         return result
     }
 
-    mutating public func visitListItem(_ listItem: ListItem) -> NSAttributedString {
+     mutating public func visitListItem(_ listItem: ListItem) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let childrenArray = Array(listItem.children)
         let childrenCount = childrenArray.count
         
         for (index, child) in childrenArray.enumerated() {
-            let childAttributedString = visit(child) // This will call visitParagraph, visitUnorderedList etc.
+            let childAttributedString = visit(child)
             result.append(childAttributedString)
             
+            // If there are multiple blocks within this list item, add extra spacing between them.
             if childrenCount > 1 && index < childrenCount - 1 {
-                 // If a list item has multiple blocks (e.g. two paragraphs), add a newline between them.
-                 // The paragraph spacing attributes should handle the visual separation.
-                 if childAttributedString.length > 0 && childAttributedString.string.last != "\n" {
+                // Ensure the previous block's string doesn't already end with multiple newlines.
+                // This aims to create a "blank line" effect (\n\n) between blocks.
+                
+                // First, ensure there's at least one newline if the child didn't provide one.
+                if result.length > 0 && !result.string.hasSuffix("\n") {
                     result.append(NSAttributedString.singleNewline(withFontSize: resolvedBaseFontSize, fontName: resolvedBaseFontName, color: resolvedBaseTextColor))
-                 }
+                }
+                // Then, add one more newline to create the blank line effect.
+                result.append(NSAttributedString.singleNewline(withFontSize: resolvedBaseFontSize, fontName: resolvedBaseFontName, color: resolvedBaseTextColor))
             }
         }
         return result
-    }
-    
+    }  
     public func visitThematicBreak(_ thematicBreak: ThematicBreak) -> NSAttributedString {
         let tempSelf = self
         let hrString = String(repeating: "⎯", count: 30)

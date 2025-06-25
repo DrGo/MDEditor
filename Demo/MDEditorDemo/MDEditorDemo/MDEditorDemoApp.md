@@ -1,14 +1,3 @@
-//
-//  MDEditorDemoApp.swift
-//  MDEditor
-//
-//  Created by drgo on 2025-05-25.
-//
-
-
-// No single runnable code block here, this is a multi-file/target setup guide.
-// Instructions and individual file contents will be provided below.
-```
 
 **I. Instructions to Add an iOS App Target to Your Swift Package:**
 

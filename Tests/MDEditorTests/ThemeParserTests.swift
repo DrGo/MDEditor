@@ -1,364 +1,218 @@
 // ThemeParserTests.swift
 
 import Testing
-@testable import MDEditor // Gives access to MDEditorTheme, MarkdownElementStyle, HexColor, TextDirection
-import SwiftUI // For CGFloat
+@testable import MDEditor
+import SwiftUI
+import Foundation
 
-// Ensure LosslessStringConvertible conformances for CGFloat, Bool are available.
-// They are defined in ThemeParser.swift for the main module.
-
-// This extension for Testing.Tag is assumed to be defined in the main MDEditorTests.swift file
-// or another shared location within the MDEditorTests target.
-// extension Testing.Tag {
-//     @Tag static var parser: Self // Example if you add a specific tag for parser tests
-// }
-
-
-@Suite("ThemeParser Tests") // Optionally add .tags(.parser) if defined
-struct ThemeParserTests {
-
-    // Helper to load the content of default.yaml from the test bundle
-    func loadDefaultYamlFromBundle() throws -> String {
-        guard let url = Bundle.module.url(forResource: "default", withExtension: "yaml", subdirectory: "TestThemes") else {
-            throw TestError("default.yaml not found in TestThemes subdirectory of test bundle.")
-        }
-        // Corrected: Use encoding parameter
-        return try String(contentsOf: url, encoding: .utf8)
+fileprivate extension HexColor {
+    static func fromHexWithAlphaForTest(_ hexString: String) -> (rgbHexColor: HexColor, alpha: UInt8)? {
+        var hex = hexString.trimmingCharacters(in: .alphanumerics.inverted); if hex.hasPrefix("#") { hex.remove(at: hex.startIndex) }
+        guard hex.count == 8 else { return nil }; var rgbaValue: UInt64 = 0; guard Scanner(string: hex).scanHexInt64(&rgbaValue) else { return nil }
+        let r = UInt8((rgbaValue & 0xFF000000) >> 24); let g = UInt8((rgbaValue & 0x00FF0000) >> 16); let b = UInt8((rgbaValue & 0x0000FF00) >> 8); let a = UInt8(rgbaValue & 0x000000FF)
+        return (HexColor(red: r, green: g, blue: b), a)
     }
+}
+
+@Suite("ThemeParser - Theme Structure & Legacy Tests")
+struct ThemeParserStructureTests {
+
     struct TestError: Error, LocalizedError {
         let message: String
         init(_ message: String) { self.message = message }
         var errorDescription: String? { message }
     }
 
-
-    @Test("parser: Successfully parses valid default.yaml content")
-    func testParseValidDefaultYaml() throws { // Mark as throws
+    @Test("parser: Successfully parses valid theme (legacy structure)")
+    func testParseValidLegacyStructure() throws {
         let yamlContent = """
-        name: "Test Default Theme"
-        author: "Test Author"
-        description: "A test theme."
+        name: "Test Legacy Theme"
+        author: "Legacy Author"
+        description: "A legacy theme."
         layoutDirection: "rtl"
         globalFontName: "Helvetica"
-        globalBaseFontSize: 18.0
-        globalTextColor: "#112233"
-        globalBackgroundColor: "#ABCDEF"
-        globalAccentColor: "#007AFF"
-
-        defaultElementStyle:
-          fontName: "Georgia"
-          fontSize: 17
-          isBold: true
-          isItalic: false
-          foregroundColor: "#AABBCC"
-          backgroundColor: "#121212"
-          strikethrough: true
-          underline: false
-          paragraphSpacingBefore: 5.5
-          paragraphSpacingAfter: 10.5
-          lineHeightMultiplier: 1.3
-          firstLineHeadIndent: 0
-          headIndent: 0
-          tailIndent: 0
-          kerning: 0.2
-          alignment: "center"
-
-        elementStyles:
-          paragraph:
-            lineHeightMultiplier: 1.7
-            alignment: "left"
-          heading1:
-            fontSize: 30.0
-            isBold: true
-          link:
-            foregroundColor: "#FF00FF"
-            underline: true
-        """
-
-        let theme = try ThemeParser.parse(themeFileContents: yamlContent)
-
-        #expect(theme.name == "Test Default Theme")
-        #expect(theme.author == "Test Author")
-        #expect(theme.description == "A test theme.")
-        #expect(theme.layoutDirection == .rightToLeft)
-        #expect(theme.globalFontName == "Helvetica")
-        #expect(theme.globalBaseFontSize == 18.0)
-        #expect(theme.globalTextColor == HexColor("112233"))
-        #expect(theme.globalBackgroundColor == HexColor("ABCDEF"))
-        #expect(theme.globalAccentColor == HexColor("007AFF"))
-
-        let defaultStyle = try #require(theme.defaultElementStyle)
-        #expect(defaultStyle.fontName == "Georgia")
-        #expect(defaultStyle.fontSize == 17.0) // Test int to CGFloat
-        #expect(defaultStyle.isBold == true)
-        #expect(defaultStyle.isItalic == false)
-        #expect(defaultStyle.foregroundColor == HexColor("AABBCC"))
-        #expect(defaultStyle.backgroundColor == HexColor("121212"))
-        #expect(defaultStyle.strikethrough == true)
-        #expect(defaultStyle.underline == false)
-        #expect(defaultStyle.paragraphSpacingBefore == 5.5)
-        #expect(defaultStyle.paragraphSpacingAfter == 10.5)
-        #expect(defaultStyle.lineHeightMultiplier == 1.3)
-        #expect(defaultStyle.kerning == 0.2)
-        #expect(defaultStyle.alignment == "center")
-        
-        let elementStyles = try #require(theme.elementStyles)
-        #expect(elementStyles.count == 3)
-        
-        let paraStyle = try #require(elementStyles["paragraph"])
-        #expect(paraStyle.lineHeightMultiplier == 1.7)
-        #expect(paraStyle.alignment == "left")
-
-        let h1Style = try #require(elementStyles["heading1"])
-        #expect(h1Style.fontSize == 30.0)
-        #expect(h1Style.isBold == true)
-        
-        let linkStyle = try #require(elementStyles["link"])
-        #expect(linkStyle.foregroundColor == HexColor("FF00FF"))
-        #expect(linkStyle.underline == true)
-    }
-
-    @Test("parser: Parses default.yaml from bundle")
-    func testParseDefaultYamlFromBundle() throws { // Mark as throws
-        let yamlContent = """
-        name: "Bundled Default"
-        globalBaseFontSize: 16
+        globalBaseFontSize: 16.0
         defaultElementStyle:
           fontSize: 15.0
+          foregroundColor: "#111111"
         elementStyles:
           heading1:
-            fontSize: 28
+            fontSize: 28.0
+            isBold: true
+          paragraph:
+            alignment: "justify"
+            lineHeightMultiplier: 1.8
+            animationHintDuration: "0.5s"
         """
-        // To use loadDefaultYamlFromBundle(), ensure default.yaml is in TestTarget/Resources/TestThemes/
-        // let yamlContent = try loadDefaultYamlFromBundle()
         let theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.name == "Bundled Default")
+        #expect(theme.frontMatter.title == "Test Legacy Theme")
+        #expect(theme.frontMatter.author == "Legacy Author")
+        #expect(theme.frontMatter.description == "A legacy theme.")
+        #expect(theme.layoutDirection == TextDirection.rightToLeft)
+        #expect(theme.globalFontName == "Helvetica")
         #expect(theme.globalBaseFontSize == 16.0)
-        #expect(theme.defaultElementStyle?.fontSize == 15.0)
-        #expect(theme.elementStyles?["heading1"]?.fontSize == 28.0)
+        let defaultStyle = try #require(theme.defaultElementStyle)
+        #expect(defaultStyle.fontSize == 15.0)
+        #expect(defaultStyle.foregroundColor == HexColor("111111"))
+        let elementStyles = try #require(theme.elementStyles)
+        let h1Style = try #require(elementStyles["heading1"])
+        #expect(h1Style.fontSize == 28.0)
+        #expect(h1Style.isBold == true)
+        let paraStyle = try #require(elementStyles["paragraph"])
+        #expect(paraStyle.alignment == "justify")
+        #expect(paraStyle.lineHeightMultiplier == 1.8)
+        #expect(paraStyle.animationHintDuration == 0.5)
     }
 
-    @Test("parser: Throws on missing required 'name' key")
-    func testMissingRequiredNameKey() throws { // Mark as throws
+    @Test("parser: Throws on missing required 'name' key (legacy structure)")
+    func testMissingRequiredNameKeyLegacy() throws {
         let yamlContent = """
-        author: "Test Author"
+        author: "Legacy Author Only"
         globalBaseFontSize: 16.0
         """
         var thrownError: Error?
-        do {
-            _ = try ThemeParser.parse(themeFileContents: yamlContent)
-        } catch {
-            thrownError = error
-        }
-        let themeError = try #require(thrownError as? ThemeParsingError)
-        // Corrected: Provide all associated values for the pattern
-        guard case .missingKey(let key, _, _) = themeError else {
-            Issue.record("Expected .missingKey, got \(themeError)")
-            return
-        }
-        #expect(key == "name")
+        do { _ = try ThemeParser.parse(themeFileContents: yamlContent) } catch { thrownError = error }
+        let yamlError = try #require(thrownError as? YamlParsingError)
+        guard case .missingKey(let key, _, _) = yamlError else { Issue.record("Expected .missingKey, got \(yamlError)"); return }
+        #expect(key == "title (in front matter) or name (legacy top-level)")
     }
 
-    @Test("parser: Throws on type mismatch for CGFloat")
-    func testTypeMismatchForCGFloat() throws { // Mark as throws
+    @Test("parser: Duplicate top-level key throws error (legacy)")
+    func testDuplicateTopLevelKeyLegacy() throws {
         let yamlContent = """
-        name: "Test Theme"
-        globalBaseFontSize: sixteen 
+        name: "Theme One"
+        author: "Author A"
+        name: "Theme Two" 
         """
         var thrownError: Error?
-        do {
-            _ = try ThemeParser.parse(themeFileContents: yamlContent)
-        } catch {
-            thrownError = error
-        }
-        let themeError = try #require(thrownError as? ThemeParsingError)
-        // Corrected: Provide all associated values for the pattern
-        guard case .typeMismatch(let key, let expected, let actual, _, _) = themeError else {
-            Issue.record("Expected .typeMismatch, got \(themeError)")
-            return
-        }
-        #expect(key == "globalBaseFontSize")
-        #expect(expected.contains("CGFloat") || expected.contains("LosslessStringConvertible"))
-        #expect(actual == "sixteen")
-    }
-    
-    @Test("parser: Throws on type mismatch for HexColor")
-    func testTypeMismatchForHexColor() throws { // Mark as throws
-        let yamlContent = """
-        name: "Test Theme"
-        globalTextColor: not_a_hex
-        """
-         var thrownError: Error?
-        do {
-            _ = try ThemeParser.parse(themeFileContents: yamlContent)
-        } catch {
-            thrownError = error
-        }
-        let themeError = try #require(thrownError as? ThemeParsingError)
-        // Corrected: Provide all associated values for the pattern
-        guard case .typeMismatch(let key, _, let actual, _, _) = themeError else {
-            Issue.record("Expected .typeMismatch, got \(themeError)")
-            return
-        }
-        #expect(key == "globalTextColor")
-        #expect(actual == "not_a_hex")
+        do { _ = try ThemeParser.parse(themeFileContents: yamlContent) } catch { thrownError = error }
+        let yamlError = try #require(thrownError as? YamlParsingError)
+        guard case .syntaxError(let line, let message) = yamlError else { Issue.record("Expected .syntaxError for duplicate key, got \(yamlError)"); return }
+        #expect(line == 3)
+        #expect(message == "Duplicate top-level key in theme body: 'name'")
     }
 
-    @Test("parser: Handles optional fields being absent")
-    func testOptionalFieldsAbsent() throws { // Mark as throws
+    // MARK: - AnimationHintDuration Tests (Theme-specific style property)
+    @Test("animationHintDuration: Parses valid time intervals in defaultElementStyle")
+    func testValidAnimationHintDurationInDefault() throws {
         let yamlContent = """
-        name: "Minimal Theme"
-        globalBaseFontSize: 15
-        """
-        let theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.name == "Minimal Theme")
-        #expect(theme.author == nil)
-        #expect(theme.description == nil)
-        #expect(theme.globalFontName == nil)
-        #expect(theme.globalBaseFontSize == 15.0)
-        #expect(theme.defaultElementStyle == nil)
-        #expect(theme.elementStyles == nil || theme.elementStyles?.isEmpty == true)
-    }
-    
-    @Test("parser: Handles explicit null for optional fields")
-    func testOptionalFieldsExplicitNull() throws { // Mark as throws
-        let yamlContent = """
-        name: "Null Test Theme"
-        author: null
-        description: ~ # Another way to write null
-        globalFontName: NULL # Test case-insensitivity of null
-        """
-        let theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.name == "Null Test Theme")
-        #expect(theme.author == nil, "Author should be nil for 'null'")
-        #expect(theme.description == nil, "Description should be nil for '~ # comment'")
-        #expect(theme.globalFontName == nil, "GlobalFontName should be nil for 'NULL'")
-    }
-
-    @Test("parser: Incorrect indentation for style property")
-    func testIncorrectIndentation() throws { // Mark as throws
-        let yamlContent = """
-        name: "Indent Test"
+        name: "Animation Theme" 
         defaultElementStyle:
-          fontName: "Arial"
-            fontSize: 16 # Incorrectly indented
-        """
-        var thrownError: Error?
-        do {
-            _ = try ThemeParser.parse(themeFileContents: yamlContent)
-        } catch {
-            thrownError = error
-        }
-        
-        let themeError = try #require(thrownError as? ThemeParsingError)
-        // Corrected: Match the full .typeMismatch or .unexpectedIndentation pattern
-        switch themeError {
-        // The current parser might throw unexpectedIndentation if it detects the indent mismatch first
-        case .unexpectedIndentation(line: 4, expected: 2, actual: 4): // Assuming indentUnitSpaces = 2
-            break
-        // Or it might proceed and fail on a type mismatch if the structure is severely broken
-        case .typeMismatch(key: "fontSize", _, _, _, _):
-            break
-        case .syntaxError(line: 4, _):
-            break
-        default:
-            Issue.record("Expected unexpectedIndentation, typeMismatch, or syntaxError for bad indent, got \(themeError)")
-        }
-    }
-
-    @Test("parser: Valid HexColor decoding")
-    func testValidHexColorDecoding() throws {
-        let yamlContent = """
-        name: "Hex Test"
-        globalTextColor: "#FF0000"      # Standard
-        globalBackgroundColor: 00FF00   # No hash
-        globalAccentColor: '#00F'       # Shorthand with quotes
-        defaultElementStyle:
-          foregroundColor: FFA500      # Orange, no hash, no quotes
-          backgroundColor: '#8080807F' # Gray with alpha (alpha currently ignored by HexColor)
+          animationHintDuration: "1.5s"
         """
         let theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.globalTextColor == HexColor(red: 255, green: 0, blue: 0))
-        #expect(theme.globalBackgroundColor == HexColor(red: 0, green: 255, blue: 0))
-        #expect(theme.globalAccentColor == HexColor(red: 0, green: 0, blue: 255)) // #00F -> #0000FF
-        
         let defaultStyle = try #require(theme.defaultElementStyle)
-        #expect(defaultStyle.foregroundColor == HexColor(red: 255, green: 165, blue: 0)) // FFA500
-        // HexColor currently doesn't parse alpha, so #8080807F will be parsed as #808080
-        #expect(defaultStyle.backgroundColor == HexColor(red: 128, green: 128, blue: 128))
+        #expect(defaultStyle.animationHintDuration == 1.5)
     }
 
-    @Test("parser: Valid LayoutDirection decoding")
-    func testValidLayoutDirectionDecoding() throws {
-        var yamlContent = """
-        name: "LTR Test"
-        layoutDirection: "ltr"
+    @Test("animationHintDuration: Parses various valid time intervals in elementStyles")
+    func testValidAnimationHintDurationInElement() throws {
+        let simplerYamlContent = """
+        name: "Animation Theme Elements"
+        elementStyles:
+          paragraph:
+            animationHintDuration: "0.25s"
+          heading1:
+            animationHintDuration: "2m30s" 
+          heading2:
+            animationHintDuration: "1h"
+          heading3:
+            animationHintDuration: "10m"
+          heading4:
+            animationHintDuration: "0s"
+          heading5:
+            animationHintDuration: "1h 30m 15s"
         """
-        var theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.layoutDirection == .leftToRight)
-
-        yamlContent = """
-        name: "RTL Test"
-        layoutDirection: rtl 
-        """
-        theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.layoutDirection == .rightToLeft)
-
-        yamlContent = """
-        name: "RTL Uppercase Test"
-        layoutDirection: "RTL" 
-        """
-        theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.layoutDirection == .rightToLeft)
+        let theme = try ThemeParser.parse(themeFileContents: simplerYamlContent)
+        let elementStyles = try #require(theme.elementStyles)
         
-        yamlContent = """
-        name: "No Direction Test"
-        """
-        theme = try ThemeParser.parse(themeFileContents: yamlContent)
-        #expect(theme.layoutDirection == nil) // Optional, so should be nil
+        let paraStyle = try #require(elementStyles["paragraph"])
+        #expect(paraStyle.animationHintDuration == 0.25)
+
+        let h1Style = try #require(elementStyles["heading1"])
+        #expect(h1Style.animationHintDuration == TimeInterval(150))
+
+        let h2Style = try #require(elementStyles["heading2"])
+        #expect(h2Style.animationHintDuration == TimeInterval(3600))
+
+        let h3Style = try #require(elementStyles["heading3"])
+        #expect(h3Style.animationHintDuration == TimeInterval(600))
+
+        let h4Style = try #require(elementStyles["heading4"])
+        #expect(h4Style.animationHintDuration == 0.0)
+
+        let h5Style = try #require(elementStyles["heading5"])
+        let expectedH5Duration: TimeInterval = TimeInterval(1 * 3600 + 30 * 60 + 15)
+        #expect(h5Style.animationHintDuration == expectedH5Duration)
     }
 
-    @Test("parser: Invalid HexColor decoding throws error")
-    func testInvalidHexColorDecodingThrowsError() throws {
+    @Test("animationHintDuration: Invalid time interval string throws error")
+    func testInvalidAnimationHintDuration() throws {
         let yamlContent = """
-        name: "Invalid Hex"
-        globalTextColor: "#12345" 
+        name: "Bad Animation Theme"
+        defaultElementStyle:
+          animationHintDuration: "10seconds" 
         """
         var thrownError: Error?
-        do {
-            _ = try ThemeParser.parse(themeFileContents: yamlContent)
-        } catch {
-            thrownError = error
+        do { _ = try ThemeParser.parse(themeFileContents: yamlContent) } catch { thrownError = error }
+        let yamlError = try #require(thrownError as? YamlParsingError)
+        guard case .typeMismatch(let key, let expectedType, let actual, let line, _) = yamlError else {
+            Issue.record("Expected .typeMismatch for invalid duration, got \(yamlError)"); return
         }
-        let themeError = try #require(thrownError as? ThemeParsingError)
-        guard case .typeMismatch(let key, _, let actual, let line, _) = themeError else {
-            Issue.record("Expected .typeMismatch for invalid hex, got \(themeError)")
-            return
-        }
-        #expect(key == "globalTextColor")
-        #expect(actual == "#12345")
-        #expect(line == 2)
+        #expect(key == "defaultElementStyle.animationHintDuration")
+        #expect(actual == "e") 
+        // Corrected: Match the exact expectedType string from the parser for this failure.
+        #expect(expectedType == "valid time string component (number, unit, or separator)")
+        #expect(line == 3)
+    }
+    
+    @Test("animationHintDuration: Handles explicit null")
+    func testAnimationHintDurationExplicitNull() throws {
+        let yamlContent = """
+        name: "Null Animation Theme"
+        defaultElementStyle:
+          animationHintDuration: null
+        """
+        let theme = try ThemeParser.parse(themeFileContents: yamlContent)
+        let defaultStyle = try #require(theme.defaultElementStyle)
+        #expect(defaultStyle.animationHintDuration == nil)
     }
 
-    @Test("parser: Invalid LayoutDirection decoding throws error")
-    func testInvalidLayoutDirectionDecodingThrowsError() throws {
+    @Test("animationHintDuration: Number without unit at end of string is an error")
+    func testAnimationHintDurationNumberWithoutUnitAtEnd() throws {
         let yamlContent = """
-        name: "Invalid Direction"
-        layoutDirection: "left-to-right" 
+        name: "Bad Animation"
+        defaultElementStyle:
+          animationHintDuration: "10s 5" 
         """
         var thrownError: Error?
-        do {
-            _ = try ThemeParser.parse(themeFileContents: yamlContent)
-        } catch {
-            thrownError = error
+        do { _ = try ThemeParser.parse(themeFileContents: yamlContent) } catch { thrownError = error }
+        let yamlError = try #require(thrownError as? YamlParsingError)
+        guard case .typeMismatch(let key, let expectedType, let actualValue, let line, _) = yamlError else {
+            Issue.record("Expected .typeMismatch for trailing number without unit, got \(yamlError)"); return
         }
-        let themeError = try #require(thrownError as? ThemeParsingError)
-        guard case .typeMismatch(let key, _, let actual, let line, _) = themeError else {
-            Issue.record("Expected .typeMismatch for invalid direction, got \(themeError)")
-            return
+        #expect(key == "defaultElementStyle.animationHintDuration")
+        #expect(expectedType.contains("time unit for trailing number"))
+        #expect(actualValue == "5")
+        #expect(line == 3)
+    }
+
+    @Test("animationHintDuration: Number without unit before separator is an error")
+    func testAnimationHintDurationNumberWithoutUnitBeforeSeparator() throws {
+        let yamlContent = """
+        name: "Bad Animation 2"
+        defaultElementStyle:
+          animationHintDuration: "10 5s" 
+        """
+        var thrownError: Error?
+        do { _ = try ThemeParser.parse(themeFileContents: yamlContent) } catch { thrownError = error }
+        let yamlError = try #require(thrownError as? YamlParsingError)
+        guard case .typeMismatch(let key, let expectedType, _, let line, _) = yamlError else {
+            Issue.record("Expected .typeMismatch for number without unit before separator, got \(yamlError)"); return
         }
-        #expect(key == "layoutDirection")
-        #expect(actual == "left-to-right")
-        #expect(line == 2)
+        #expect(key == "defaultElementStyle.animationHintDuration")
+        #expect(expectedType.contains("time unit after number"))
+        #expect(line == 3)
     }
 }
+

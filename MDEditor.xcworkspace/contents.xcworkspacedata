@@ -83,6 +83,9 @@
          location = "group:MDEditor"
          name = "MDEditor">
          <FileRef
+            location = "group:YamlParser.swift">
+         </FileRef>
+         <FileRef
             location = "group:ThemeParser.swift">
          </FileRef>
          <FileRef

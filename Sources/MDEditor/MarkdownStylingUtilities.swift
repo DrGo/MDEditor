@@ -166,7 +166,7 @@ extension MFont { // Made extension public
 
         #if canImport(UIKit)
         guard let newFontDescriptor = currentDescriptor.withSymbolicTraits(combinedTraits) else { return self }
-        return MFont(descriptor: newFontDescriptor, size: newPointSize ?? pointSize) ?? self
+        return MFont(descriptor: newFontDescriptor, size: newPointSize ?? pointSize)
         #elseif canImport(AppKit)
         let newFontDescriptor: NSFontDescriptor = currentDescriptor.withSymbolicTraits(combinedTraits)
         return MFont(descriptor: newFontDescriptor, size: newPointSize ?? self.pointSize) ?? self
